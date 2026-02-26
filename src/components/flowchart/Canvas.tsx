@@ -158,7 +158,7 @@ export const Canvas: React.FC = () => {
     <div className="flex-1 overflow-hidden relative" style={{ background: 'hsl(216,30%,95%)' }} onDragOver={handleDragOver} onDrop={handleDrop}>
       <svg
         ref={svgRef}
-        className="w-full h-full"
+        className="w-full h-full flowchart-canvas"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
