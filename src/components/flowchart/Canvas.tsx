@@ -1,0 +1,212 @@
+import React, { useRef, useState, useEffect } from 'react';
+import { useFlowchartStore } from '@/stores/flowchartStore';
+import { ShapeNode } from './ShapeNode';
+import { EdgeLine } from './EdgeLine';
+import { getPortPosition } from '@/utils/geometry';
+import { PortDirection, ShapeType } from '@/types/flowchart';
+
+interface DragState { nodeId: string; offsetX: number; offsetY: number; }
+interface ConnectState { sourceNodeId: string; sourcePort: PortDirection; mouseX: number; mouseY: number; }
+interface PanState { startX: number; startY: number; offsetX: number; offsetY: number; }
+
+export const Canvas: React.FC = () => {
+  const store = useFlowchartStore();
+  const { nodes, edges, selectedIds, canvas } = store;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const spaceRef = useRef(false);
+
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [connectState, setConnectState] = useState<ConnectState | null>(null);
+  const [panState, setPanState] = useState<PanState | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+
+  const screenToCanvas = (cx: number, cy: number) => {
+    const { canvas: c } = useFlowchartStore.getState();
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: (cx - rect.left - c.offset.x) / c.zoom, y: (cy - rect.top - c.offset.y) / c.zoom };
+  };
+
+  // Wheel zoom (non-passive for preventDefault)
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const s = useFlowchartStore.getState();
+      const delta = e.deltaY > 0 ? 0.92 : 1.08;
+      const newZoom = Math.min(5, Math.max(0.1, s.canvas.zoom * delta));
+      const rect = svg.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      s.setOffset({
+        x: mx - (mx - s.canvas.offset.x) * (newZoom / s.canvas.zoom),
+        y: my - (my - s.canvas.offset.y) * (newZoom / s.canvas.zoom),
+      });
+      s.setZoom(newZoom);
+    };
+    svg.addEventListener('wheel', handler, { passive: false });
+    return () => svg.removeEventListener('wheel', handler);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) { spaceRef.current = true; e.preventDefault(); }
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'Delete' || e.code === 'Backspace') useFlowchartStore.getState().deleteSelected();
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? useFlowchartStore.getState().redo() : useFlowchartStore.getState().undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); useFlowchartStore.getState().redo(); }
+    };
+    const onUp = (e: KeyboardEvent) => { if (e.code === 'Space') spaceRef.current = false; };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (spaceRef.current || e.button === 1) {
+      setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
+      return;
+    }
+    if ((e.target as SVGElement) === svgRef.current || (e.target as SVGElement).classList.contains('canvas-bg')) {
+      store.clearSelection();
+      setEditingNodeId(null);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (panState) {
+      useFlowchartStore.getState().setOffset({ x: panState.offsetX + e.clientX - panState.startX, y: panState.offsetY + e.clientY - panState.startY });
+      return;
+    }
+    if (dragState) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      useFlowchartStore.getState().moveNode(dragState.nodeId, pos.x - dragState.offsetX, pos.y - dragState.offsetY);
+      return;
+    }
+    if (connectState) {
+      setConnectState(prev => prev ? { ...prev, mouseX: e.clientX, mouseY: e.clientY } : null);
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (panState) { setPanState(null); return; }
+    if (dragState) { setDragState(null); return; }
+    if (connectState) {
+      const pos = screenToCanvas(connectState.mouseX, connectState.mouseY);
+      const s = useFlowchartStore.getState();
+      for (const node of s.nodes) {
+        if (node.id === connectState.sourceNodeId) continue;
+        for (const dir of ['N', 'S', 'E', 'W'] as PortDirection[]) {
+          const pp = getPortPosition(node, dir);
+          if (Math.hypot(pos.x - pp.x, pos.y - pp.y) < 20) {
+            s.addEdge(connectState.sourceNodeId, connectState.sourcePort, node.id, dir);
+            setConnectState(null);
+            return;
+          }
+        }
+      }
+      setConnectState(null);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('shapeType');
+    if (!type) return;
+    const pos = screenToCanvas(e.clientX, e.clientY);
+    store.addNode(type as ShapeType, pos.x, pos.y);
+  };
+
+  const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const s = useFlowchartStore.getState();
+    s.select([nodeId]);
+    s.pushHistory();
+    const node = s.nodes.find(n => n.id === nodeId)!;
+    const pos = screenToCanvas(e.clientX, e.clientY);
+    setDragState({ nodeId, offsetX: pos.x - node.x, offsetY: pos.y - node.y });
+  };
+
+  const handlePortMouseDown = (nodeId: string, port: PortDirection, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConnectState({ sourceNodeId: nodeId, sourcePort: port, mouseX: e.clientX, mouseY: e.clientY });
+  };
+
+  const handleEdgeClick = (edgeId: string) => {
+    store.select([edgeId]);
+  };
+
+  // Temp connection line
+  let tempLine: React.ReactNode = null;
+  if (connectState) {
+    const sn = nodes.find(n => n.id === connectState.sourceNodeId);
+    if (sn) {
+      const start = getPortPosition(sn, connectState.sourcePort);
+      const end = screenToCanvas(connectState.mouseX, connectState.mouseY);
+      tempLine = <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="hsl(280,70%,35%)" strokeWidth={2} strokeDasharray="6 4" />;
+    }
+  }
+
+  const cursorStyle = spaceRef.current || panState ? 'grabbing' : 'default';
+
+  return (
+    <div className="flex-1 overflow-hidden relative" style={{ background: 'hsl(216,30%,95%)' }} onDragOver={handleDragOver} onDrop={handleDrop}>
+      <svg
+        ref={svgRef}
+        className="w-full h-full"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{ cursor: cursorStyle }}
+      >
+        <defs>
+          {canvas.grid.enabled && (
+            <pattern id="grid" width={canvas.grid.size} height={canvas.grid.size} patternUnits="userSpaceOnUse" patternTransform={`translate(${canvas.offset.x},${canvas.offset.y}) scale(${canvas.zoom})`}>
+              <circle cx={canvas.grid.size / 2} cy={canvas.grid.size / 2} r={0.8} fill="hsl(220,15%,78%)" />
+            </pattern>
+          )}
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#6A1B9A" />
+          </marker>
+          <marker id="arrowhead-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 10 0 L 0 5 L 10 10 Z" fill="#6A1B9A" />
+          </marker>
+        </defs>
+
+        {canvas.grid.enabled && <rect width="100%" height="100%" fill="url(#grid)" />}
+
+        <g transform={`translate(${canvas.offset.x},${canvas.offset.y}) scale(${canvas.zoom})`}>
+          {edges.map(edge => (
+            <EdgeLine key={edge.id} edge={edge} nodes={nodes} selected={selectedIds.includes(edge.id)} onClick={handleEdgeClick} />
+          ))}
+          {nodes.map(node => (
+            <ShapeNode
+              key={node.id}
+              node={node}
+              selected={selectedIds.includes(node.id)}
+              hovered={hoveredNodeId === node.id}
+              editing={editingNodeId === node.id}
+              onMouseDown={handleNodeMouseDown}
+              onMouseEnter={() => setHoveredNodeId(node.id)}
+              onMouseLeave={() => setHoveredNodeId(null)}
+              onPortMouseDown={handlePortMouseDown}
+              onDoubleClick={() => setEditingNodeId(node.id)}
+              onEditDone={(label) => { store.updateNodeLabel(node.id, label); setEditingNodeId(null); }}
+            />
+          ))}
+          {tempLine}
+        </g>
+      </svg>
+
+      <div className="absolute bottom-3 right-3 text-xs px-2 py-1 rounded bg-card/80 text-muted-foreground border border-border backdrop-blur-sm">
+        {Math.round(canvas.zoom * 100)}%
+      </div>
+    </div>
+  );
+};
