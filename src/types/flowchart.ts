@@ -1,4 +1,4 @@
-export type ShapeType = 'terminator' | 'process' | 'decision' | 'manual' | 'preparation' | 'sort' | 'merge' | 'documents' | 'output' | 'database' | 'cloud' | 'exception';
+export type ShapeType = 'terminator' | 'process' | 'decision' | 'manual' | 'preparation' | 'sort' | 'merge' | 'documents' | 'output' | 'database' | 'cloud' | 'exception' | 'text';
 export type PortDirection = 'N' | 'S' | 'E' | 'W';
 export type ConnectorType = 'straight' | 'elbow';
 export type LinePattern = 'solid' | 'dotted' | 'dashed';

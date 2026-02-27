@@ -5,6 +5,7 @@ let counter = 0;
 const genId = () => `id-${Date.now()}-${++counter}`;
 
 const defaultDimensions: Record<ShapeType, { w: number; h: number }> = {
+  text: { w: 120, h: 36 },
   terminator: { w: 140, h: 56 },
   process: { w: 140, h: 72 },
   decision: { w: 120, h: 100 },
@@ -20,6 +21,7 @@ const defaultDimensions: Record<ShapeType, { w: number; h: number }> = {
 };
 
 const defaultLabels: Record<ShapeType, string> = {
+  text: 'Text',
   terminator: 'Start/End',
   process: 'Process',
   decision: 'Decision',

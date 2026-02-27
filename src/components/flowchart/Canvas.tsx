@@ -5,7 +5,7 @@ import { EdgeLine } from './EdgeLine';
 import { getPortPosition } from '@/utils/geometry';
 import { PortDirection, ShapeType } from '@/types/flowchart';
 
-interface DragState { nodeId: string; offsetX: number; offsetY: number; }
+interface DragState { nodeIds: string[]; offsets: Record<string, { x: number; y: number }>; }
 interface ConnectState { sourceNodeId: string; sourcePort: PortDirection; mouseX: number; mouseY: number; }
 interface PanState { startX: number; startY: number; offsetX: number; offsetY: number; }
 
@@ -77,14 +77,22 @@ export const Canvas: React.FC = () => {
     }
   };
 
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (panState) {
       useFlowchartStore.getState().setOffset({ x: panState.offsetX + e.clientX - panState.startX, y: panState.offsetY + e.clientY - panState.startY });
       return;
     }
-    if (dragState) {
+    if (dragState && dragStartPos.current) {
       const pos = screenToCanvas(e.clientX, e.clientY);
-      useFlowchartStore.getState().moveNode(dragState.nodeId, pos.x - dragState.offsetX, pos.y - dragState.offsetY);
+      const s = useFlowchartStore.getState();
+      for (const nodeId of dragState.nodeIds) {
+        const off = dragState.offsets[nodeId];
+        if (off) {
+          s.moveNode(nodeId, pos.x - dragStartPos.current.x + off.x, pos.y - dragStartPos.current.y + off.y);
+        }
+      }
       return;
     }
     if (connectState) {
@@ -94,7 +102,7 @@ export const Canvas: React.FC = () => {
 
   const handleMouseUp = () => {
     if (panState) { setPanState(null); return; }
-    if (dragState) { setDragState(null); return; }
+    if (dragState) { setDragState(null); dragStartPos.current = null; return; }
     if (connectState) {
       const pos = screenToCanvas(connectState.mouseX, connectState.mouseY);
       const s = useFlowchartStore.getState();
@@ -125,11 +133,30 @@ export const Canvas: React.FC = () => {
   const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const s = useFlowchartStore.getState();
-    s.select([nodeId]);
+    
+    // Shift+click for multi-select
+    if (e.shiftKey) {
+      const newSelection = s.selectedIds.includes(nodeId)
+        ? s.selectedIds.filter(id => id !== nodeId)
+        : [...s.selectedIds, nodeId];
+      s.select(newSelection);
+    } else if (!s.selectedIds.includes(nodeId)) {
+      s.select([nodeId]);
+    }
+
     s.pushHistory();
-    const node = s.nodes.find(n => n.id === nodeId)!;
+
+    // Build drag state for all selected nodes (including newly clicked)
+    const currentSelected = useFlowchartStore.getState().selectedIds;
+    const dragNodeIds = currentSelected.includes(nodeId) ? currentSelected : [nodeId];
+    const offsets: Record<string, { x: number; y: number }> = {};
+    for (const id of dragNodeIds) {
+      const n = s.nodes.find(n => n.id === id);
+      if (n) offsets[id] = { x: n.x, y: n.y };
+    }
     const pos = screenToCanvas(e.clientX, e.clientY);
-    setDragState({ nodeId, offsetX: pos.x - node.x, offsetY: pos.y - node.y });
+    dragStartPos.current = pos;
+    setDragState({ nodeIds: dragNodeIds, offsets });
   };
 
   const handlePortMouseDown = (nodeId: string, port: PortDirection, e: React.MouseEvent) => {
@@ -137,8 +164,16 @@ export const Canvas: React.FC = () => {
     setConnectState({ sourceNodeId: nodeId, sourcePort: port, mouseX: e.clientX, mouseY: e.clientY });
   };
 
-  const handleEdgeClick = (edgeId: string) => {
-    store.select([edgeId]);
+  const handleEdgeClick = (edgeId: string, e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      const s = useFlowchartStore.getState();
+      const newSelection = s.selectedIds.includes(edgeId)
+        ? s.selectedIds.filter(id => id !== edgeId)
+        : [...s.selectedIds, edgeId];
+      s.select(newSelection);
+    } else {
+      store.select([edgeId]);
+    }
   };
 
   // Temp connection line
@@ -168,7 +203,7 @@ export const Canvas: React.FC = () => {
         <defs>
           {canvas.grid.enabled && (
             <pattern id="grid" width={canvas.grid.size} height={canvas.grid.size} patternUnits="userSpaceOnUse" patternTransform={`translate(${canvas.offset.x},${canvas.offset.y}) scale(${canvas.zoom})`}>
-              <circle cx={canvas.grid.size / 2} cy={canvas.grid.size / 2} r={0.8} fill="hsl(220,15%,78%)" />
+              <circle cx={canvas.grid.size / 2} cy={canvas.grid.size / 2} r={0.8} fill="hsl(220,15%,78%)" className="grid-dot" />
             </pattern>
           )}
           <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
@@ -179,7 +214,7 @@ export const Canvas: React.FC = () => {
           </marker>
         </defs>
 
-        {canvas.grid.enabled && <rect width="100%" height="100%" fill="url(#grid)" />}
+        {canvas.grid.enabled && <rect className="canvas-bg grid-bg" width="100%" height="100%" fill="url(#grid)" />}
 
         <g transform={`translate(${canvas.offset.x},${canvas.offset.y}) scale(${canvas.zoom})`}>
           {edges.map(edge => (

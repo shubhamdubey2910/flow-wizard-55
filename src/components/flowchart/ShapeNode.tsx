@@ -16,6 +16,8 @@ interface Props {
 
 function renderShape(type: string, w: number, h: number, fill: string, stroke: string, sw: number) {
   switch (type) {
+    case 'text':
+      return <rect width={w} height={h} fill="transparent" stroke="none" strokeWidth={0} />;
     case 'terminator':
       return <rect width={w} height={h} rx={h / 2} fill={fill} stroke={stroke} strokeWidth={sw} />;
     case 'process':
@@ -89,6 +91,7 @@ export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, o
 
   const ports = portPositions(node.w, node.h);
   const { fill, stroke, strokeWidth, fontSize, textColor } = node.style;
+  const isTextNode = node.type === 'text';
 
   return (
     <g
@@ -104,7 +107,7 @@ export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, o
       )}
       {renderShape(node.type, node.w, node.h, fill, stroke, strokeWidth)}
       {editing ? (
-        <foreignObject x={4} y={node.h / 2 - 14} width={node.w - 8} height={28}>
+        <foreignObject x={4} y={isTextNode ? 4 : node.h / 2 - 14} width={node.w - 8} height={isTextNode ? node.h - 8 : 28}>
           <input
             autoFocus
             value={editText}
@@ -116,11 +119,11 @@ export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, o
           />
         </foreignObject>
       ) : (
-        <text x={node.w / 2} y={node.h / 2} textAnchor="middle" dominantBaseline="central" fill={textColor} fontSize={fontSize} fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', userSelect: 'none' }}>
+        <text x={node.w / 2} y={node.h / 2} textAnchor="middle" dominantBaseline="central" fill={textColor} fontSize={fontSize} fontFamily="system-ui, sans-serif" fontWeight={isTextNode ? 400 : undefined} style={{ pointerEvents: 'none', userSelect: 'none' }}>
           {node.label}
         </text>
       )}
-      {(hovered || selected) && (['N', 'S', 'E', 'W'] as PortDirection[]).map(dir => (
+      {(hovered || selected) && !isTextNode && (['N', 'S', 'E', 'W'] as PortDirection[]).map(dir => (
         <circle
           key={dir}
           cx={ports[dir].x}
