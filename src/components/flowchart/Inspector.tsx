@@ -2,12 +2,20 @@ import React from 'react';
 import { useFlowchartStore } from '@/stores/flowchartStore';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Minus, Plus } from 'lucide-react';
 
 export const Inspector: React.FC = () => {
   const { nodes, edges, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType } = useFlowchartStore();
 
   const selectedNode = nodes.find(n => selectedIds.includes(n.id));
   const selectedEdge = edges.find(e => selectedIds.includes(e.id));
+
+  const adjustFontSize = (delta: number) => {
+    if (!selectedNode) return;
+    const newSize = Math.max(8, Math.min(48, selectedNode.style.fontSize + delta));
+    updateNodeStyle(selectedNode.id, { fontSize: newSize });
+  };
 
   return (
     <div className="w-64 bg-card border-l border-border flex flex-col">
@@ -23,6 +31,19 @@ export const Inspector: React.FC = () => {
               <Label className="text-xs">Label</Label>
               <Input value={selectedNode.label} onChange={e => updateNodeLabel(selectedNode.id, e.target.value)} className="h-8 text-sm" />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Font Size</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => adjustFontSize(-1)}>
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <span className="text-sm font-medium w-10 text-center tabular-nums">{selectedNode.style.fontSize}px</span>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => adjustFontSize(1)}>
+                  <Plus className="h-3 w-3" />
+                </Button>
+                <input type="range" min={8} max={48} value={selectedNode.style.fontSize} onChange={e => updateNodeStyle(selectedNode.id, { fontSize: +e.target.value })} className="flex-1 accent-primary" />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Fill</Label>
@@ -35,15 +56,9 @@ export const Inspector: React.FC = () => {
                 <input type="color" value={selectedNode.style.stroke} onChange={e => updateNodeStyle(selectedNode.id, { stroke: e.target.value })} className="w-full h-8 rounded border border-border cursor-pointer" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Stroke Width</Label>
-                <input type="range" min={1} max={6} value={selectedNode.style.strokeWidth} onChange={e => updateNodeStyle(selectedNode.id, { strokeWidth: +e.target.value })} className="w-full accent-primary" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Font Size</Label>
-                <input type="range" min={10} max={24} value={selectedNode.style.fontSize} onChange={e => updateNodeStyle(selectedNode.id, { fontSize: +e.target.value })} className="w-full accent-primary" />
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Stroke Width</Label>
+              <input type="range" min={1} max={6} value={selectedNode.style.strokeWidth} onChange={e => updateNodeStyle(selectedNode.id, { strokeWidth: +e.target.value })} className="w-full accent-primary" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Text Color</Label>
@@ -117,6 +132,7 @@ export const Inspector: React.FC = () => {
                 <span>Pan</span><span className="text-right">Space + drag</span>
                 <span>Zoom</span><span className="text-right">Scroll</span>
                 <span>Edit text</span><span className="text-right">Double-click</span>
+                <span>Multi-select</span><span className="text-right">Shift+click</span>
               </div>
             </div>
           </>

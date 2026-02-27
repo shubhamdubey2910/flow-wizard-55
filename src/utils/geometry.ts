@@ -21,10 +21,32 @@ export function getNearestPort(node: FlowNode, point: Point): PortDirection {
   return nearest;
 }
 
+/**
+ * Check if two points are roughly aligned (within a threshold).
+ */
+function isAligned(start: Point, end: Point, threshold = 8): { horizontal: boolean; vertical: boolean } {
+  return {
+    horizontal: Math.abs(start.y - end.y) < threshold,
+    vertical: Math.abs(start.x - end.x) < threshold,
+  };
+}
+
 export function getManhattanRoute(
   start: Point, end: Point,
   sourcePort: PortDirection, targetPort: PortDirection
 ): Point[] {
+  // If ports are opposite and aligned, just draw a straight line
+  const aligned = isAligned(start, end);
+  const isVerticalPair = (sourcePort === 'S' && targetPort === 'N') || (sourcePort === 'N' && targetPort === 'S');
+  const isHorizontalPair = (sourcePort === 'E' && targetPort === 'W') || (sourcePort === 'W' && targetPort === 'E');
+
+  if (isVerticalPair && aligned.vertical) {
+    return [{ ...start }, { ...end }];
+  }
+  if (isHorizontalPair && aligned.horizontal) {
+    return [{ ...start }, { ...end }];
+  }
+
   const margin = 24;
   const points: Point[] = [{ ...start }];
 

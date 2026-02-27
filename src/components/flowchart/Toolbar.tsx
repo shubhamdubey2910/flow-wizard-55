@@ -5,36 +5,51 @@ import { useFlowchartStore } from '@/stores/flowchartStore';
 
 const getSvgElement = (): SVGSVGElement | null => document.querySelector('svg.flowchart-canvas');
 
-const svgToDataUrl = (svgEl: SVGSVGElement): Promise<string> => {
-  return new Promise((resolve) => {
-    const clone = svgEl.cloneNode(true) as SVGSVGElement;
-    // Get bounding box of content
-    const bbox = svgEl.getBBox();
-    const pad = 20;
-    clone.setAttribute('viewBox', `${bbox.x - pad} ${bbox.y - pad} ${bbox.width + pad * 2} ${bbox.height + pad * 2}`);
-    clone.setAttribute('width', String(Math.ceil(bbox.width + pad * 2)));
-    clone.setAttribute('height', String(Math.ceil(bbox.height + pad * 2)));
-    clone.style.background = '#ffffff';
-
-    const serializer = new XMLSerializer();
-    const svgStr = serializer.serializeToString(clone);
-    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
-    resolve(url);
-  });
+/**
+ * Compute content bounding box from the store nodes/edges rather than SVG getBBox,
+ * so we can reliably center and exclude grid dots.
+ */
+const getContentBounds = () => {
+  const { nodes } = useFlowchartStore.getState();
+  if (!nodes.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.w);
+    maxY = Math.max(maxY, n.y + n.h);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 };
 
 const rasterize = (svgEl: SVGSVGElement, format: 'png' | 'jpeg'): Promise<Blob> => {
   return new Promise(async (resolve, reject) => {
-    const bbox = svgEl.getBBox();
-    const pad = 20;
-    const w = Math.ceil(bbox.width + pad * 2);
-    const h = Math.ceil(bbox.height + pad * 2);
+    const bounds = getContentBounds();
+    if (!bounds) return reject('No content');
+
+    const pad = 60;
+    const w = Math.ceil(bounds.width + pad * 2);
+    const h = Math.ceil(bounds.height + pad * 2);
     const scale = 2;
 
     const clone = svgEl.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute('viewBox', `${bbox.x - pad} ${bbox.y - pad} ${w} ${h}`);
+    
+    // Remove grid background elements from the clone
+    const gridBg = clone.querySelector('.grid-bg');
+    if (gridBg) gridBg.remove();
+    const gridPattern = clone.querySelector('#grid');
+    if (gridPattern) gridPattern.remove();
+    
+    // Remove selection indicators
+    clone.querySelectorAll('[stroke-dasharray="5 3"]').forEach(el => el.remove());
+
+    // Set viewBox centered on content
+    clone.setAttribute('viewBox', `${bounds.x - pad} ${bounds.y - pad} ${w} ${h}`);
     clone.setAttribute('width', String(w * scale));
     clone.setAttribute('height', String(h * scale));
+    // Remove any transform on the content group — we use viewBox instead
+    const contentG = clone.querySelector('g[transform]');
+    if (contentG) contentG.removeAttribute('transform');
 
     const svgStr = new XMLSerializer().serializeToString(clone);
     const img = new Image();
@@ -43,10 +58,9 @@ const rasterize = (svgEl: SVGSVGElement, format: 'png' | 'jpeg'): Promise<Blob> 
       canvas.width = w * scale;
       canvas.height = h * scale;
       const ctx = canvas.getContext('2d')!;
-      if (format === 'jpeg') {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
+      // Always white background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
       canvas.toBlob((blob) => blob ? resolve(blob) : reject('Failed'), `image/${format}`, 0.95);
     };
@@ -91,8 +105,9 @@ export const Toolbar: React.FC = () => {
       img.onload = () => {
         const w = img.width / 2;
         const h = img.height / 2;
-        const pdf = new jsPDF({ orientation: w > h ? 'landscape' : 'portrait', unit: 'px', format: [w, h] });
-        pdf.addImage(url, 'PNG', 0, 0, w, h);
+        const pdf = new jsPDF({ orientation: w > h ? 'landscape' : 'portrait', unit: 'px', format: [w + 40, h + 40] });
+        // Center the image in the PDF page
+        pdf.addImage(url, 'PNG', 20, 20, w, h);
         pdf.save('flowchart.pdf');
         URL.revokeObjectURL(url);
       };
