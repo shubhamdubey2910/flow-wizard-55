@@ -263,6 +263,13 @@ export const Canvas: React.FC = () => {
             />
           ))}
           {tempLine}
+          {marqueeState && (() => {
+            const x = Math.min(marqueeState.startX, marqueeState.currentX);
+            const y = Math.min(marqueeState.startY, marqueeState.currentY);
+            const w = Math.abs(marqueeState.currentX - marqueeState.startX);
+            const h = Math.abs(marqueeState.currentY - marqueeState.startY);
+            return <rect x={x} y={y} width={w} height={h} fill="hsla(220, 80%, 60%, 0.1)" stroke="hsl(220, 80%, 60%)" strokeWidth={1} strokeDasharray="6 3" rx={2} />;
+          })()}
         </g>
       </svg>
 
