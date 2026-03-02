@@ -8,6 +8,7 @@ import { PortDirection, ShapeType } from '@/types/flowchart';
 interface DragState { nodeIds: string[]; offsets: Record<string, { x: number; y: number }>; }
 interface ConnectState { sourceNodeId: string; sourcePort: PortDirection; mouseX: number; mouseY: number; }
 interface PanState { startX: number; startY: number; offsetX: number; offsetY: number; }
+interface MarqueeState { startX: number; startY: number; currentX: number; currentY: number; }
 
 export const Canvas: React.FC = () => {
   const store = useFlowchartStore();
@@ -20,6 +21,7 @@ export const Canvas: React.FC = () => {
   const [panState, setPanState] = useState<PanState | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [marqueeState, setMarqueeState] = useState<MarqueeState | null>(null);
 
   const screenToCanvas = (cx: number, cy: number) => {
     const { canvas: c } = useFlowchartStore.getState();
@@ -59,6 +61,9 @@ export const Canvas: React.FC = () => {
       if (e.code === 'Delete' || e.code === 'Backspace') useFlowchartStore.getState().deleteSelected();
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? useFlowchartStore.getState().redo() : useFlowchartStore.getState().undo(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); useFlowchartStore.getState().redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') { e.preventDefault(); useFlowchartStore.getState().copySelected(); }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') { e.preventDefault(); useFlowchartStore.getState().cutSelected(); }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') { e.preventDefault(); useFlowchartStore.getState().pasteClipboard(); }
     };
     const onUp = (e: KeyboardEvent) => { if (e.code === 'Space') spaceRef.current = false; };
     window.addEventListener('keydown', onDown);
@@ -74,6 +79,9 @@ export const Canvas: React.FC = () => {
     if ((e.target as SVGElement) === svgRef.current || (e.target as SVGElement).classList.contains('canvas-bg')) {
       store.clearSelection();
       setEditingNodeId(null);
+      // Start marquee selection
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      setMarqueeState({ startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y });
     }
   };
 
@@ -97,6 +105,11 @@ export const Canvas: React.FC = () => {
     }
     if (connectState) {
       setConnectState(prev => prev ? { ...prev, mouseX: e.clientX, mouseY: e.clientY } : null);
+      return;
+    }
+    if (marqueeState) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      setMarqueeState(prev => prev ? { ...prev, currentX: pos.x, currentY: pos.y } : null);
     }
   };
 
@@ -118,6 +131,20 @@ export const Canvas: React.FC = () => {
         }
       }
       setConnectState(null);
+    }
+    if (marqueeState) {
+      const s = useFlowchartStore.getState();
+      const x1 = Math.min(marqueeState.startX, marqueeState.currentX);
+      const y1 = Math.min(marqueeState.startY, marqueeState.currentY);
+      const x2 = Math.max(marqueeState.startX, marqueeState.currentX);
+      const y2 = Math.max(marqueeState.startY, marqueeState.currentY);
+      if (Math.abs(x2 - x1) > 5 || Math.abs(y2 - y1) > 5) {
+        const hitIds = s.nodes
+          .filter(n => n.x < x2 && n.x + n.w > x1 && n.y < y2 && n.y + n.h > y1)
+          .map(n => n.id);
+        if (hitIds.length) s.select(hitIds);
+      }
+      setMarqueeState(null);
     }
   };
 
@@ -236,6 +263,13 @@ export const Canvas: React.FC = () => {
             />
           ))}
           {tempLine}
+          {marqueeState && (() => {
+            const x = Math.min(marqueeState.startX, marqueeState.currentX);
+            const y = Math.min(marqueeState.startY, marqueeState.currentY);
+            const w = Math.abs(marqueeState.currentX - marqueeState.startX);
+            const h = Math.abs(marqueeState.currentY - marqueeState.startY);
+            return <rect x={x} y={y} width={w} height={h} fill="hsla(220, 80%, 60%, 0.1)" stroke="hsl(220, 80%, 60%)" strokeWidth={1} strokeDasharray="6 3" rx={2} />;
+          })()}
         </g>
       </svg>
 
