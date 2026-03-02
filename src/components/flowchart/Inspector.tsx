@@ -3,7 +3,31 @@ import { useFlowchartStore } from '@/stores/flowchartStore';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, Check } from 'lucide-react';
+
+const COLOR_SWATCHES = [
+  '#FFFFFF', '#000000', '#9CA3AF',
+  '#EF4444', '#F97316', '#EAB308',
+  '#22C55E', '#3B82F6', '#6A1B9A',
+];
+
+const ColorSwatchPicker: React.FC<{ value: string; onChange: (color: string) => void }> = ({ value, onChange }) => (
+  <div className="flex flex-wrap gap-1.5">
+    {COLOR_SWATCHES.map(c => (
+      <button
+        key={c}
+        onClick={() => onChange(c)}
+        className="w-6 h-6 rounded border border-border cursor-pointer flex items-center justify-center hover:scale-110 transition-transform"
+        style={{ backgroundColor: c }}
+        title={c}
+      >
+        {value.toUpperCase() === c.toUpperCase() && (
+          <Check className="h-3 w-3" style={{ color: ['#FFFFFF', '#EAB308', '#F97316'].includes(c) ? '#000' : '#FFF' }} />
+        )}
+      </button>
+    ))}
+  </div>
+);
 
 export const Inspector: React.FC = () => {
   const { nodes, edges, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType } = useFlowchartStore();
@@ -44,17 +68,13 @@ export const Inspector: React.FC = () => {
                 <input type="range" min={8} max={48} value={selectedNode.style.fontSize} onChange={e => updateNodeStyle(selectedNode.id, { fontSize: +e.target.value })} className="flex-1 accent-primary" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Fill</Label>
-                <div className="relative">
-                  <input type="color" value={selectedNode.style.fill} onChange={e => updateNodeStyle(selectedNode.id, { fill: e.target.value })} className="w-full h-8 rounded border border-border cursor-pointer" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Stroke</Label>
-                <input type="color" value={selectedNode.style.stroke} onChange={e => updateNodeStyle(selectedNode.id, { stroke: e.target.value })} className="w-full h-8 rounded border border-border cursor-pointer" />
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Fill</Label>
+              <ColorSwatchPicker value={selectedNode.style.fill} onChange={c => updateNodeStyle(selectedNode.id, { fill: c })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Stroke</Label>
+              <ColorSwatchPicker value={selectedNode.style.stroke} onChange={c => updateNodeStyle(selectedNode.id, { stroke: c })} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Stroke Width</Label>
@@ -62,7 +82,7 @@ export const Inspector: React.FC = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Text Color</Label>
-              <input type="color" value={selectedNode.style.textColor} onChange={e => updateNodeStyle(selectedNode.id, { textColor: e.target.value })} className="w-full h-8 rounded border border-border cursor-pointer" />
+              <ColorSwatchPicker value={selectedNode.style.textColor} onChange={c => updateNodeStyle(selectedNode.id, { textColor: c })} />
             </div>
           </>
         )}
@@ -102,7 +122,7 @@ export const Inspector: React.FC = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Stroke</Label>
-              <input type="color" value={selectedEdge.style.stroke} onChange={e => updateEdgeStyle(selectedEdge.id, { stroke: e.target.value })} className="w-full h-8 rounded border border-border cursor-pointer" />
+              <ColorSwatchPicker value={selectedEdge.style.stroke} onChange={c => updateEdgeStyle(selectedEdge.id, { stroke: c })} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Width</Label>
