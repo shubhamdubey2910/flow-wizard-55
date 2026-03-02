@@ -37,6 +37,7 @@ const defaultLabels: Record<ShapeType, string> = {
 };
 
 interface Snapshot { nodes: FlowNode[]; edges: FlowEdge[]; }
+interface Clipboard { nodes: FlowNode[]; edges: FlowEdge[]; }
 
 interface FlowchartStore {
   nodes: FlowNode[];
@@ -45,6 +46,7 @@ interface FlowchartStore {
   canvas: CanvasState;
   past: Snapshot[];
   future: Snapshot[];
+  clipboard: Clipboard;
 
   addNode: (type: ShapeType, x: number, y: number) => string;
   moveNode: (id: string, x: number, y: number) => void;
@@ -62,6 +64,9 @@ interface FlowchartStore {
   undo: () => void;
   redo: () => void;
   pushHistory: () => void;
+  copySelected: () => void;
+  cutSelected: () => void;
+  pasteClipboard: () => void;
   exportJSON: () => string;
   importJSON: (json: string) => void;
   loadDemo: () => void;
@@ -78,6 +83,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   canvas: { zoom: 1, offset: { x: 0, y: 0 }, grid: { enabled: true, size: 20 } },
   past: [],
   future: [],
+  clipboard: { nodes: [], edges: [] },
 
   pushHistory: () => set(s => ({
     past: [...s.past.slice(-30), { nodes: JSON.parse(JSON.stringify(s.nodes)), edges: JSON.parse(JSON.stringify(s.edges)) }],
@@ -173,6 +179,40 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     const next = s.future[0];
     return { future: s.future.slice(1), past: [...s.past, { nodes: s.nodes, edges: s.edges }], nodes: next.nodes, edges: next.edges, selectedIds: [] };
   }),
+
+  copySelected: () => {
+    const { nodes, edges, selectedIds } = get();
+    const selNodes = nodes.filter(n => selectedIds.includes(n.id));
+    const selNodeIds = new Set(selNodes.map(n => n.id));
+    const selEdges = edges.filter(e => selNodeIds.has(e.source.nodeId) && selNodeIds.has(e.target.nodeId));
+    set({ clipboard: { nodes: JSON.parse(JSON.stringify(selNodes)), edges: JSON.parse(JSON.stringify(selEdges)) } });
+  },
+
+  cutSelected: () => {
+    get().copySelected();
+    get().deleteSelected();
+  },
+
+  pasteClipboard: () => {
+    const { clipboard } = get();
+    if (!clipboard.nodes.length) return;
+    get().pushHistory();
+    const idMap: Record<string, string> = {};
+    clipboard.nodes.forEach(n => { idMap[n.id] = genId(); });
+    const newNodes = clipboard.nodes.map(n => ({ ...n, id: idMap[n.id], x: n.x + 20, y: n.y + 20 }));
+    const newEdges = clipboard.edges.map(e => ({
+      ...e, id: genId(),
+      source: { ...e.source, nodeId: idMap[e.source.nodeId] },
+      target: { ...e.target, nodeId: idMap[e.target.nodeId] },
+    }));
+    // Update clipboard offsets for subsequent pastes
+    set(s => ({
+      nodes: [...s.nodes, ...newNodes],
+      edges: [...s.edges, ...newEdges],
+      selectedIds: newNodes.map(n => n.id),
+      clipboard: { nodes: clipboard.nodes.map(n => ({ ...n, x: n.x + 20, y: n.y + 20 })), edges: clipboard.edges },
+    }));
+  },
 
   exportJSON: () => {
     const { nodes, edges, canvas } = get();
