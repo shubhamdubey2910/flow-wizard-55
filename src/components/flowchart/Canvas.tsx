@@ -98,25 +98,24 @@ export const Canvas: React.FC = () => {
 
   // --- Mouse handlers ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (spaceRef.current || e.button === 1) {
+    // Right-click or middle-click or space+click = pan
+    if (spaceRef.current || e.button === 1 || e.button === 2) {
       setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
       return;
     }
     const target = e.target as SVGElement;
     const isBackground = target === svgRef.current || target.classList.contains('canvas-bg');
-    if (isBackground) {
+    if (isBackground && e.button === 0) {
       store.clearSelection();
       setEditingNodeId(null);
-      if (e.shiftKey) {
-        // Shift+drag on background = marquee
-        const pos = screenToCanvas(e.clientX, e.clientY);
-        setMarqueeState({ startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y });
-      } else {
-        // Regular drag on background = pan
-        setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
-      }
+      // Left-click drag on background = marquee select
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      setMarqueeState({ startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y });
     }
   };
+
+  // Prevent context menu on canvas so right-click drag works
+  const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); };
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
@@ -312,7 +311,7 @@ export const Canvas: React.FC = () => {
     }
   }
 
-  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'grab';
+  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'default';
 
   // Dimension tooltip for resize
   const resizingNode = resizeState ? nodes.find(n => n.id === resizeState.nodeId) : null;
@@ -326,6 +325,7 @@ export const Canvas: React.FC = () => {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onContextMenu={handleContextMenu}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

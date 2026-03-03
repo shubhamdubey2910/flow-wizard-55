@@ -1,9 +1,10 @@
 import React from 'react';
 import { useFlowchartStore } from '@/stores/flowchartStore';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Check } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 const COLOR_SWATCHES = [
   '#FFFFFF', '#000000', '#9CA3AF',
@@ -53,7 +54,14 @@ export const Inspector: React.FC = () => {
           <>
             <div className="space-y-1.5">
               <Label className="text-xs">Label</Label>
-              <Input value={selectedNode.label} onChange={e => updateNodeLabel(selectedNode.id, e.target.value)} className="h-8 text-sm" />
+              <Textarea
+                value={selectedNode.label}
+                onChange={e => updateNodeLabel(selectedNode.id, e.target.value)}
+                className="min-h-[60px] text-sm resize-y"
+                placeholder="Enter label text…"
+                rows={Math.max(2, selectedNode.label.split('\n').length)}
+              />
+              <span className="text-[10px] text-muted-foreground">Enter for newline</span>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Font Size</Label>
