@@ -50,6 +50,7 @@ interface FlowchartStore {
 
   addNode: (type: ShapeType, x: number, y: number) => string;
   moveNode: (id: string, x: number, y: number) => void;
+  resizeNode: (id: string, x: number, y: number, w: number, h: number) => void;
   updateNodeLabel: (id: string, label: string) => void;
   updateNodeStyle: (id: string, style: Partial<FlowNode['style']>) => void;
   deleteSelected: () => void;
@@ -66,7 +67,7 @@ interface FlowchartStore {
   pushHistory: () => void;
   copySelected: () => void;
   cutSelected: () => void;
-  pasteClipboard: () => void;
+  pasteClipboard: (mousePos?: Point) => void;
   exportJSON: () => string;
   importJSON: (json: string) => void;
   loadDemo: () => void;
@@ -113,6 +114,19 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     const sx = grid.enabled ? Math.round(x / grid.size) * grid.size : x;
     const sy = grid.enabled ? Math.round(y / grid.size) * grid.size : y;
     return { nodes: s.nodes.map(n => n.id === id ? { ...n, x: sx, y: sy } : n) };
+  }),
+
+  resizeNode: (id, x, y, w, h) => set(s => {
+    const { grid } = s.canvas;
+    const snap = (v: number) => grid.enabled ? Math.round(v / grid.size) * grid.size : v;
+    return {
+      nodes: s.nodes.map(n => n.id === id ? {
+        ...n,
+        x: snap(x), y: snap(y),
+        w: Math.max(40, grid.enabled ? Math.round(w / grid.size) * grid.size : w),
+        h: Math.max(30, grid.enabled ? Math.round(h / grid.size) * grid.size : h),
+      } : n),
+    };
   }),
 
   updateNodeLabel: (id, label) => {
@@ -193,24 +207,50 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     get().deleteSelected();
   },
 
-  pasteClipboard: () => {
-    const { clipboard } = get();
+  pasteClipboard: (mousePos?: Point) => {
+    const { clipboard, canvas } = get();
     if (!clipboard.nodes.length) return;
     get().pushHistory();
     const idMap: Record<string, string> = {};
     clipboard.nodes.forEach(n => { idMap[n.id] = genId(); });
-    const newNodes = clipboard.nodes.map(n => ({ ...n, id: idMap[n.id], x: n.x + 20, y: n.y + 20 }));
+
+    let offsetX: number, offsetY: number;
+    if (mousePos) {
+      const minX = Math.min(...clipboard.nodes.map(n => n.x));
+      const maxX = Math.max(...clipboard.nodes.map(n => n.x + n.w));
+      const minY = Math.min(...clipboard.nodes.map(n => n.y));
+      const maxY = Math.max(...clipboard.nodes.map(n => n.y + n.h));
+      offsetX = mousePos.x - (minX + maxX) / 2;
+      offsetY = mousePos.y - (minY + maxY) / 2;
+    } else {
+      offsetX = 16;
+      offsetY = 16;
+    }
+
+    const { grid } = canvas;
+    const newNodes = clipboard.nodes.map(n => {
+      let nx = n.x + offsetX;
+      let ny = n.y + offsetY;
+      if (grid.enabled) {
+        nx = Math.round(nx / grid.size) * grid.size;
+        ny = Math.round(ny / grid.size) * grid.size;
+      }
+      return { ...n, id: idMap[n.id], x: nx, y: ny };
+    });
     const newEdges = clipboard.edges.map(e => ({
       ...e, id: genId(),
       source: { ...e.source, nodeId: idMap[e.source.nodeId] },
       target: { ...e.target, nodeId: idMap[e.target.nodeId] },
     }));
-    // Update clipboard offsets for subsequent pastes
+
+    // Store pasted positions for +16 offset on subsequent pastes
+    const updatedClipNodes = clipboard.nodes.map((n, i) => ({ ...n, x: newNodes[i].x, y: newNodes[i].y }));
+
     set(s => ({
       nodes: [...s.nodes, ...newNodes],
       edges: [...s.edges, ...newEdges],
       selectedIds: newNodes.map(n => n.id),
-      clipboard: { nodes: clipboard.nodes.map(n => ({ ...n, x: n.x + 20, y: n.y + 20 })), edges: clipboard.edges },
+      clipboard: { nodes: updatedClipNodes, edges: clipboard.edges },
     }));
   },
 
