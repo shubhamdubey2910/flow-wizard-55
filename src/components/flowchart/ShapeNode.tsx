@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FlowNode, PortDirection } from '@/types/flowchart';
+
+export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
 interface Props {
   node: FlowNode;
@@ -12,6 +14,7 @@ interface Props {
   onPortMouseDown: (nodeId: string, port: PortDirection, e: React.MouseEvent) => void;
   onDoubleClick: () => void;
   onEditDone: (label: string) => void;
+  onResizeStart?: (nodeId: string, handle: ResizeHandle, e: React.MouseEvent) => void;
 }
 
 function renderShape(type: string, w: number, h: number, fill: string, stroke: string, sw: number) {
@@ -85,13 +88,41 @@ const portPositions = (w: number, h: number) => ({
   W: { x: 0, y: h / 2 },
 });
 
-export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, onMouseDown, onMouseEnter, onMouseLeave, onPortMouseDown, onDoubleClick, onEditDone }) => {
+const handleCursors: Record<ResizeHandle, string> = {
+  nw: 'nwse-resize', n: 'ns-resize', ne: 'nesw-resize', e: 'ew-resize',
+  se: 'nwse-resize', s: 'ns-resize', sw: 'nesw-resize', w: 'ew-resize',
+};
+
+function getHandlePositions(w: number, h: number): Record<ResizeHandle, { x: number; y: number }> {
+  return {
+    nw: { x: 0, y: 0 }, n: { x: w / 2, y: 0 }, ne: { x: w, y: 0 },
+    e: { x: w, y: h / 2 },
+    se: { x: w, y: h }, s: { x: w / 2, y: h }, sw: { x: 0, y: h },
+    w: { x: 0, y: h / 2 },
+  };
+}
+
+export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, onMouseDown, onMouseEnter, onMouseLeave, onPortMouseDown, onDoubleClick, onEditDone, onResizeStart }) => {
   const [editText, setEditText] = useState(node.label);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (editing) setEditText(node.label); }, [editing, node.label]);
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.select();
+    }
+  }, [editing]);
 
   const ports = portPositions(node.w, node.h);
   const { fill, stroke, strokeWidth, fontSize, textColor } = node.style;
   const isTextNode = node.type === 'text';
+  const handles = getHandlePositions(node.w, node.h);
+
+  // Multi-line text rendering
+  const lines = node.label.split('\n');
+  const lineHeight = fontSize * 1.4;
+  const totalTextH = lines.length * lineHeight;
+  const textStartY = isTextNode ? lineHeight * 0.8 : (node.h - totalTextH) / 2 + lineHeight * 0.8;
 
   return (
     <g
@@ -107,22 +138,35 @@ export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, o
       )}
       {renderShape(node.type, node.w, node.h, fill, stroke, strokeWidth)}
       {editing ? (
-        <foreignObject x={4} y={isTextNode ? 4 : node.h / 2 - 14} width={node.w - 8} height={isTextNode ? node.h - 8 : 28}>
-          <input
-            autoFocus
-            value={editText}
-            onChange={e => setEditText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') onEditDone(editText); if (e.key === 'Escape') onEditDone(node.label); }}
-            onBlur={() => onEditDone(editText)}
-            className="w-full text-center bg-transparent outline-none ring-2 ring-primary rounded px-1"
-            style={{ fontSize, color: textColor }}
-          />
+        <foreignObject x={4} y={4} width={node.w - 8} height={node.h - 8}>
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <textarea
+              ref={textareaRef}
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEditDone(editText); }
+                if (e.key === 'Escape') onEditDone(node.label);
+              }}
+              onBlur={() => onEditDone(editText)}
+              className="w-full flex-1 text-center bg-transparent outline-none ring-2 ring-primary rounded px-1 resize-none"
+              style={{ fontSize, color: textColor, lineHeight: 1.4, overflow: 'hidden' }}
+            />
+            <span style={{ fontSize: 9, color: '#999', textAlign: 'center', marginTop: 1 }}>
+              Shift+Enter for newline
+            </span>
+          </div>
         </foreignObject>
       ) : (
-        <text x={node.w / 2} y={node.h / 2} textAnchor="middle" dominantBaseline="central" fill={textColor} fontSize={fontSize} fontFamily="system-ui, sans-serif" fontWeight={isTextNode ? 400 : undefined} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-          {node.label}
+        <text x={node.w / 2} textAnchor="middle" fill={textColor} fontSize={fontSize} fontFamily="system-ui, sans-serif" fontWeight={isTextNode ? 400 : undefined} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          {lines.map((line, i) => (
+            <tspan key={i} x={node.w / 2} y={textStartY + i * lineHeight}>
+              {line || '\u00A0'}
+            </tspan>
+          ))}
         </text>
       )}
+      {/* Connection ports */}
       {(hovered || selected) && !isTextNode && (['N', 'S', 'E', 'W'] as PortDirection[]).map(dir => (
         <circle
           key={dir}
@@ -134,6 +178,22 @@ export const ShapeNode: React.FC<Props> = ({ node, selected, hovered, editing, o
           strokeWidth={2}
           style={{ cursor: 'crosshair' }}
           onMouseDown={(e) => { e.stopPropagation(); onPortMouseDown(node.id, dir, e); }}
+        />
+      ))}
+      {/* Resize handles */}
+      {selected && !isTextNode && onResizeStart && (Object.keys(handles) as ResizeHandle[]).map(h => (
+        <rect
+          key={h}
+          x={handles[h].x - 4}
+          y={handles[h].y - 4}
+          width={8}
+          height={8}
+          fill="white"
+          stroke="hsl(280,70%,35%)"
+          strokeWidth={1.5}
+          rx={1}
+          style={{ cursor: handleCursors[h] }}
+          onMouseDown={(e) => { e.stopPropagation(); onResizeStart(node.id, h, e); }}
         />
       ))}
     </g>

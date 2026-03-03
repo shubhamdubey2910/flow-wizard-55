@@ -1,20 +1,27 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useFlowchartStore } from '@/stores/flowchartStore';
-import { ShapeNode } from './ShapeNode';
+import { ShapeNode, ResizeHandle } from './ShapeNode';
 import { EdgeLine } from './EdgeLine';
-import { getPortPosition } from '@/utils/geometry';
+import { getPortPosition, applyResize, computeSmartGuides, SmartGuide } from '@/utils/geometry';
 import { PortDirection, ShapeType } from '@/types/flowchart';
 
 interface DragState { nodeIds: string[]; offsets: Record<string, { x: number; y: number }>; }
 interface ConnectState { sourceNodeId: string; sourcePort: PortDirection; mouseX: number; mouseY: number; }
 interface PanState { startX: number; startY: number; offsetX: number; offsetY: number; }
 interface MarqueeState { startX: number; startY: number; currentX: number; currentY: number; }
+interface ResizeState {
+  nodeId: string; handle: ResizeHandle;
+  startX: number; startY: number;
+  orig: { x: number; y: number; w: number; h: number };
+  shiftKey: boolean;
+}
 
 export const Canvas: React.FC = () => {
   const store = useFlowchartStore();
   const { nodes, edges, selectedIds, canvas } = store;
   const svgRef = useRef<SVGSVGElement>(null);
   const spaceRef = useRef(false);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [connectState, setConnectState] = useState<ConnectState | null>(null);
@@ -22,15 +29,30 @@ export const Canvas: React.FC = () => {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [marqueeState, setMarqueeState] = useState<MarqueeState | null>(null);
+  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [smartGuides, setSmartGuides] = useState<SmartGuide[]>([]);
 
-  const screenToCanvas = (cx: number, cy: number) => {
+  const screenToCanvas = useCallback((cx: number, cy: number) => {
     const { canvas: c } = useFlowchartStore.getState();
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return { x: (cx - rect.left - c.offset.x) / c.zoom, y: (cy - rect.top - c.offset.y) / c.zoom };
-  };
+  }, []);
 
-  // Wheel zoom (non-passive for preventDefault)
+  // Track mouse position for paste
+  const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
+    const pos = screenToCanvas(e.clientX, e.clientY);
+    lastMousePosRef.current = pos;
+  }, [screenToCanvas]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.addEventListener('mousemove', handleGlobalMouseMove as any);
+    return () => svg.removeEventListener('mousemove', handleGlobalMouseMove as any);
+  }, [handleGlobalMouseMove]);
+
+  // Wheel zoom
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -63,7 +85,10 @@ export const Canvas: React.FC = () => {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); useFlowchartStore.getState().redo(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') { e.preventDefault(); useFlowchartStore.getState().copySelected(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') { e.preventDefault(); useFlowchartStore.getState().cutSelected(); }
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') { e.preventDefault(); useFlowchartStore.getState().pasteClipboard(); }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {
+        e.preventDefault();
+        useFlowchartStore.getState().pasteClipboard(lastMousePosRef.current || undefined);
+      }
     };
     const onUp = (e: KeyboardEvent) => { if (e.code === 'Space') spaceRef.current = false; };
     window.addEventListener('keydown', onDown);
@@ -71,17 +96,25 @@ export const Canvas: React.FC = () => {
     return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, []);
 
+  // --- Mouse handlers ---
   const handleMouseDown = (e: React.MouseEvent) => {
     if (spaceRef.current || e.button === 1) {
       setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
       return;
     }
-    if ((e.target as SVGElement) === svgRef.current || (e.target as SVGElement).classList.contains('canvas-bg')) {
+    const target = e.target as SVGElement;
+    const isBackground = target === svgRef.current || target.classList.contains('canvas-bg');
+    if (isBackground) {
       store.clearSelection();
       setEditingNodeId(null);
-      // Start marquee selection
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      setMarqueeState({ startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y });
+      if (e.shiftKey) {
+        // Shift+drag on background = marquee
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        setMarqueeState({ startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y });
+      } else {
+        // Regular drag on background = pan
+        setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
+      }
     }
   };
 
@@ -89,7 +122,28 @@ export const Canvas: React.FC = () => {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (panState) {
-      useFlowchartStore.getState().setOffset({ x: panState.offsetX + e.clientX - panState.startX, y: panState.offsetY + e.clientY - panState.startY });
+      useFlowchartStore.getState().setOffset({
+        x: panState.offsetX + e.clientX - panState.startX,
+        y: panState.offsetY + e.clientY - panState.startY,
+      });
+      return;
+    }
+    if (resizeState) {
+      const dx = (e.clientX - resizeState.startX) / canvas.zoom;
+      const dy = (e.clientY - resizeState.startY) / canvas.zoom;
+      const shiftKey = e.shiftKey || resizeState.shiftKey;
+      const proposed = applyResize(resizeState.handle, dx, dy, resizeState.orig, shiftKey);
+
+      // Smart guides
+      const otherNodes = nodes.filter(n => n.id !== resizeState.nodeId);
+      const { guides, snapDx, snapDy } = computeSmartGuides(proposed, otherNodes, 6);
+      proposed.x += snapDx;
+      proposed.w -= (['w', 'nw', 'sw'].includes(resizeState.handle) ? -snapDx : snapDx);
+      proposed.y += snapDy;
+      proposed.h -= (['n', 'nw', 'ne'].includes(resizeState.handle) ? -snapDy : snapDy);
+
+      setSmartGuides(guides);
+      useFlowchartStore.getState().resizeNode(resizeState.nodeId, proposed.x, proposed.y, Math.max(40, proposed.w), Math.max(30, proposed.h));
       return;
     }
     if (dragState && dragStartPos.current) {
@@ -115,6 +169,7 @@ export const Canvas: React.FC = () => {
 
   const handleMouseUp = () => {
     if (panState) { setPanState(null); return; }
+    if (resizeState) { setResizeState(null); setSmartGuides([]); return; }
     if (dragState) { setDragState(null); dragStartPos.current = null; return; }
     if (connectState) {
       const pos = screenToCanvas(connectState.mouseX, connectState.mouseY);
@@ -148,6 +203,25 @@ export const Canvas: React.FC = () => {
     }
   };
 
+  // --- Touch handlers for pan ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      setPanState({ startX: t.clientX, startY: t.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
+    }
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (panState && e.touches.length === 1) {
+      const t = e.touches[0];
+      useFlowchartStore.getState().setOffset({
+        x: panState.offsetX + t.clientX - panState.startX,
+        y: panState.offsetY + t.clientY - panState.startY,
+      });
+    }
+  };
+  const handleTouchEnd = () => { setPanState(null); };
+
+  // --- Drag & Drop from palette ---
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -157,11 +231,10 @@ export const Canvas: React.FC = () => {
     store.addNode(type as ShapeType, pos.x, pos.y);
   };
 
+  // --- Node interaction ---
   const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const s = useFlowchartStore.getState();
-    
-    // Shift+click for multi-select
     if (e.shiftKey) {
       const newSelection = s.selectedIds.includes(nodeId)
         ? s.selectedIds.filter(id => id !== nodeId)
@@ -170,10 +243,7 @@ export const Canvas: React.FC = () => {
     } else if (!s.selectedIds.includes(nodeId)) {
       s.select([nodeId]);
     }
-
     s.pushHistory();
-
-    // Build drag state for all selected nodes (including newly clicked)
     const currentSelected = useFlowchartStore.getState().selectedIds;
     const dragNodeIds = currentSelected.includes(nodeId) ? currentSelected : [nodeId];
     const offsets: Record<string, { x: number; y: number }> = {};
@@ -191,6 +261,19 @@ export const Canvas: React.FC = () => {
     setConnectState({ sourceNodeId: nodeId, sourcePort: port, mouseX: e.clientX, mouseY: e.clientY });
   };
 
+  const handleResizeStart = (nodeId: string, handle: ResizeHandle, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    useFlowchartStore.getState().pushHistory();
+    setResizeState({
+      nodeId, handle,
+      startX: e.clientX, startY: e.clientY,
+      orig: { x: node.x, y: node.y, w: node.w, h: node.h },
+      shiftKey: e.shiftKey,
+    });
+  };
+
   const handleEdgeClick = (edgeId: string, e: React.MouseEvent) => {
     if (e.shiftKey) {
       const s = useFlowchartStore.getState();
@@ -201,6 +284,21 @@ export const Canvas: React.FC = () => {
     } else {
       store.select([edgeId]);
     }
+  };
+
+  const handleEditDone = (nodeId: string, label: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    store.updateNodeLabel(nodeId, label);
+    // Auto-expand height for multiline text
+    if (node) {
+      const lines = label.split('\n');
+      const lineHeight = node.style.fontSize * 1.4;
+      const neededH = Math.max(30, lines.length * lineHeight + 20);
+      if (neededH > node.h) {
+        store.resizeNode(nodeId, node.x, node.y, node.w, neededH);
+      }
+    }
+    setEditingNodeId(null);
   };
 
   // Temp connection line
@@ -214,7 +312,10 @@ export const Canvas: React.FC = () => {
     }
   }
 
-  const cursorStyle = spaceRef.current || panState ? 'grabbing' : 'default';
+  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'grab';
+
+  // Dimension tooltip for resize
+  const resizingNode = resizeState ? nodes.find(n => n.id === resizeState.nodeId) : null;
 
   return (
     <div className="flex-1 overflow-hidden relative" style={{ background: 'hsl(216,30%,95%)' }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -225,7 +326,10 @@ export const Canvas: React.FC = () => {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ cursor: cursorStyle }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ cursor: cursorStyle, touchAction: 'none' }}
       >
         <defs>
           {canvas.grid.enabled && (
@@ -242,6 +346,7 @@ export const Canvas: React.FC = () => {
         </defs>
 
         {canvas.grid.enabled && <rect className="canvas-bg grid-bg" width="100%" height="100%" fill="url(#grid)" />}
+        {!canvas.grid.enabled && <rect className="canvas-bg" width="100%" height="100%" fill="transparent" />}
 
         <g transform={`translate(${canvas.offset.x},${canvas.offset.y}) scale(${canvas.zoom})`}>
           {edges.map(edge => (
@@ -259,10 +364,39 @@ export const Canvas: React.FC = () => {
               onMouseLeave={() => setHoveredNodeId(null)}
               onPortMouseDown={handlePortMouseDown}
               onDoubleClick={() => setEditingNodeId(node.id)}
-              onEditDone={(label) => { store.updateNodeLabel(node.id, label); setEditingNodeId(null); }}
+              onEditDone={(label) => handleEditDone(node.id, label)}
+              onResizeStart={handleResizeStart}
             />
           ))}
           {tempLine}
+
+          {/* Smart guides */}
+          {smartGuides.map((g, i) => (
+            g.orientation === 'v'
+              ? <line key={`sg-${i}`} x1={g.pos} y1={g.start} x2={g.pos} y2={g.end} stroke="hsl(210,100%,55%)" strokeWidth={0.7} strokeDasharray="4 2" />
+              : <line key={`sg-${i}`} x1={g.start} y1={g.pos} x2={g.end} y2={g.pos} stroke="hsl(210,100%,55%)" strokeWidth={0.7} strokeDasharray="4 2" />
+          ))}
+
+          {/* Dimension tooltip during resize */}
+          {resizingNode && (
+            <g>
+              <rect
+                x={resizingNode.x + resizingNode.w / 2 - 32}
+                y={resizingNode.y + resizingNode.h + 8}
+                width={64} height={20} rx={4}
+                fill="hsl(220,20%,20%)" fillOpacity={0.85}
+              />
+              <text
+                x={resizingNode.x + resizingNode.w / 2}
+                y={resizingNode.y + resizingNode.h + 22}
+                textAnchor="middle" fill="white" fontSize={11} fontFamily="system-ui"
+              >
+                {Math.round(resizingNode.w)} × {Math.round(resizingNode.h)}
+              </text>
+            </g>
+          )}
+
+          {/* Marquee */}
           {marqueeState && (() => {
             const x = Math.min(marqueeState.startX, marqueeState.currentX);
             const y = Math.min(marqueeState.startY, marqueeState.currentY);
