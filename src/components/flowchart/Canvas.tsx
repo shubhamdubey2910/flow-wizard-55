@@ -311,7 +311,7 @@ export const Canvas: React.FC = () => {
     }
   }
 
-  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'grab';
+  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'default';
 
   // Dimension tooltip for resize
   const resizingNode = resizeState ? nodes.find(n => n.id === resizeState.nodeId) : null;
@@ -325,6 +325,7 @@ export const Canvas: React.FC = () => {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onContextMenu={handleContextMenu}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
