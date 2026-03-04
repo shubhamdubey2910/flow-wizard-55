@@ -21,11 +21,33 @@ export function getNearestPort(node: FlowNode, point: Point): PortDirection {
   return nearest;
 }
 
-function isAligned(start: Point, end: Point, threshold = 8): { horizontal: boolean; vertical: boolean } {
+const SNAP_TOLERANCE = 6;
+
+function isAligned(start: Point, end: Point, threshold = SNAP_TOLERANCE): { horizontal: boolean; vertical: boolean } {
   return {
     horizontal: Math.abs(start.y - end.y) < threshold,
     vertical: Math.abs(start.x - end.x) < threshold,
   };
+}
+
+/** Remove collinear points and micro-segments from a path */
+export function simplifyPath(pts: Point[]): Point[] {
+  if (pts.length <= 2) return pts;
+  const result: Point[] = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = pts[i];
+    const next = pts[i + 1];
+    // Skip if segment is < 1px (micro-stub)
+    if (Math.abs(curr.x - prev.x) < 1 && Math.abs(curr.y - prev.y) < 1) continue;
+    // Skip if collinear with prev and next
+    const collinearH = Math.abs(prev.y - curr.y) < 1 && Math.abs(curr.y - next.y) < 1;
+    const collinearV = Math.abs(prev.x - curr.x) < 1 && Math.abs(curr.x - next.x) < 1;
+    if (collinearH || collinearV) continue;
+    result.push(curr);
+  }
+  result.push(pts[pts.length - 1]);
+  return result;
 }
 
 export function getManhattanRoute(
@@ -36,8 +58,15 @@ export function getManhattanRoute(
   const isVerticalPair = (sourcePort === 'S' && targetPort === 'N') || (sourcePort === 'N' && targetPort === 'S');
   const isHorizontalPair = (sourcePort === 'E' && targetPort === 'W') || (sourcePort === 'W' && targetPort === 'E');
 
-  if (isVerticalPair && aligned.vertical) return [{ ...start }, { ...end }];
-  if (isHorizontalPair && aligned.horizontal) return [{ ...start }, { ...end }];
+  // Straight-line shortcut: snap the minor axis so the line is perfectly straight
+  if (isVerticalPair && aligned.vertical) {
+    const avgX = (start.x + end.x) / 2;
+    return [{ x: avgX, y: start.y }, { x: avgX, y: end.y }];
+  }
+  if (isHorizontalPair && aligned.horizontal) {
+    const avgY = (start.y + end.y) / 2;
+    return [{ x: start.x, y: avgY }, { x: end.x, y: avgY }];
+  }
 
   const margin = 24;
   const points: Point[] = [{ ...start }];
@@ -74,7 +103,7 @@ export function getManhattanRoute(
 
   points.push(tExt);
   points.push({ ...end });
-  return points;
+  return simplifyPath(points);
 }
 
 // Smart guides for alignment snapping
