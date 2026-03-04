@@ -148,10 +148,16 @@ export const Canvas: React.FC = () => {
     if (dragState && dragStartPos.current) {
       const pos = screenToCanvas(e.clientX, e.clientY);
       const s = useFlowchartStore.getState();
+      let dx = pos.x - dragStartPos.current.x;
+      let dy = pos.y - dragStartPos.current.y;
+      // Shift constrains movement to one axis (keeps connectors perpendicular)
+      if (e.shiftKey) {
+        if (Math.abs(dx) > Math.abs(dy)) { dy = 0; } else { dx = 0; }
+      }
       for (const nodeId of dragState.nodeIds) {
         const off = dragState.offsets[nodeId];
         if (off) {
-          s.moveNode(nodeId, pos.x - dragStartPos.current.x + off.x, pos.y - dragStartPos.current.y + off.y);
+          s.moveNode(nodeId, off.x + dx, off.y + dy);
         }
       }
       return;
