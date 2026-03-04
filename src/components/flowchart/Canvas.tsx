@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useFlowchartStore } from '@/stores/flowchartStore';
+import { useSwimlaneStore, hitTestLane } from '@/stores/swimlaneStore';
 import { ShapeNode, ResizeHandle } from './ShapeNode';
 import { EdgeLine } from './EdgeLine';
+import { SwimlaneRenderer } from './SwimlaneRenderer';
 import { getPortPosition, applyResize, computeSmartGuides, SmartGuide } from '@/utils/geometry';
 import { PortDirection, ShapeType } from '@/types/flowchart';
 
@@ -15,10 +17,14 @@ interface ResizeState {
   orig: { x: number; y: number; w: number; h: number };
   shiftKey: boolean;
 }
+interface PoolDragState { poolId: string; offsetX: number; offsetY: number; }
+interface LaneDividerDragState { poolId: string; laneId: string; startPos: number; origSize: number; }
 
 export const Canvas: React.FC = () => {
   const store = useFlowchartStore();
   const { nodes, edges, selectedIds, canvas } = store;
+  const swimlaneStore = useSwimlaneStore();
+  const { pools } = swimlaneStore;
   const svgRef = useRef<SVGSVGElement>(null);
   const spaceRef = useRef(false);
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
@@ -31,6 +37,8 @@ export const Canvas: React.FC = () => {
   const [marqueeState, setMarqueeState] = useState<MarqueeState | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [smartGuides, setSmartGuides] = useState<SmartGuide[]>([]);
+  const [poolDragState, setPoolDragState] = useState<PoolDragState | null>(null);
+  const [laneDividerDrag, setLaneDividerDrag] = useState<LaneDividerDragState | null>(null);
 
   const screenToCanvas = useCallback((cx: number, cy: number) => {
     const { canvas: c } = useFlowchartStore.getState();
@@ -89,6 +97,23 @@ export const Canvas: React.FC = () => {
         e.preventDefault();
         useFlowchartStore.getState().pasteClipboard(lastMousePosRef.current || undefined);
       }
+      // L = add swimlane
+      if (e.code === 'KeyL' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const sStore = useSwimlaneStore.getState();
+        if (e.shiftKey && sStore.selectedPoolId) {
+          // Toggle orientation
+          const pool = sStore.pools.find(p => p.id === sStore.selectedPoolId);
+          if (pool) {
+            sStore.updatePoolProps(pool.id, {
+              orientation: pool.orientation === 'horizontal' ? 'vertical' : 'horizontal',
+            });
+          }
+        } else {
+          const pos = lastMousePosRef.current || { x: 100, y: 100 };
+          sStore.createPool('horizontal', pos.x - 50, pos.y - 50, 3);
+        }
+      }
     };
     const onUp = (e: KeyboardEvent) => { if (e.code === 'Space') spaceRef.current = false; };
     window.addEventListener('keydown', onDown);
@@ -98,7 +123,6 @@ export const Canvas: React.FC = () => {
 
   // --- Mouse handlers ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Right-click or middle-click or space+click = pan
     if (spaceRef.current || e.button === 1 || e.button === 2) {
       setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
       return;
@@ -107,14 +131,13 @@ export const Canvas: React.FC = () => {
     const isBackground = target === svgRef.current || target.classList.contains('canvas-bg');
     if (isBackground && e.button === 0) {
       store.clearSelection();
+      swimlaneStore.selectPool(null);
       setEditingNodeId(null);
-      // Left-click drag on background = marquee select
       const pos = screenToCanvas(e.clientX, e.clientY);
       setMarqueeState({ startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y });
     }
   };
 
-  // Prevent context menu on canvas so right-click drag works
   const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); };
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -127,13 +150,37 @@ export const Canvas: React.FC = () => {
       });
       return;
     }
+    if (laneDividerDrag) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      const pool = pools.find(p => p.id === laneDividerDrag.poolId);
+      if (pool) {
+        const isH = pool.orientation === 'horizontal';
+        const delta = isH
+          ? (e.clientY - laneDividerDrag.startPos) / canvas.zoom
+          : (e.clientX - laneDividerDrag.startPos) / canvas.zoom;
+        useSwimlaneStore.getState().resizeLane(
+          laneDividerDrag.poolId,
+          laneDividerDrag.laneId,
+          laneDividerDrag.origSize + delta
+        );
+      }
+      return;
+    }
+    if (poolDragState) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      useSwimlaneStore.getState().movePool(
+        poolDragState.poolId,
+        pos.x - poolDragState.offsetX,
+        pos.y - poolDragState.offsetY
+      );
+      return;
+    }
     if (resizeState) {
       const dx = (e.clientX - resizeState.startX) / canvas.zoom;
       const dy = (e.clientY - resizeState.startY) / canvas.zoom;
       const shiftKey = e.shiftKey || resizeState.shiftKey;
       const proposed = applyResize(resizeState.handle, dx, dy, resizeState.orig, shiftKey);
 
-      // Smart guides
       const otherNodes = nodes.filter(n => n.id !== resizeState.nodeId);
       const { guides, snapDx, snapDy } = computeSmartGuides(proposed, otherNodes, 6);
       proposed.x += snapDx;
@@ -150,7 +197,6 @@ export const Canvas: React.FC = () => {
       const s = useFlowchartStore.getState();
       let dx = pos.x - dragStartPos.current.x;
       let dy = pos.y - dragStartPos.current.y;
-      // Shift constrains movement to one axis (keeps connectors perpendicular)
       if (e.shiftKey) {
         if (Math.abs(dx) > Math.abs(dy)) { dy = 0; } else { dx = 0; }
       }
@@ -174,8 +220,15 @@ export const Canvas: React.FC = () => {
 
   const handleMouseUp = () => {
     if (panState) { setPanState(null); return; }
+    if (laneDividerDrag) { setLaneDividerDrag(null); return; }
+    if (poolDragState) { setPoolDragState(null); return; }
     if (resizeState) { setResizeState(null); setSmartGuides([]); return; }
-    if (dragState) { setDragState(null); dragStartPos.current = null; return; }
+    if (dragState) {
+      // Check if nodes landed in a lane (node-lane assignment is informational for now)
+      setDragState(null);
+      dragStartPos.current = null;
+      return;
+    }
     if (connectState) {
       const pos = screenToCanvas(connectState.mouseX, connectState.mouseY);
       const s = useFlowchartStore.getState();
@@ -248,6 +301,7 @@ export const Canvas: React.FC = () => {
     } else if (!s.selectedIds.includes(nodeId)) {
       s.select([nodeId]);
     }
+    swimlaneStore.selectPool(null); // Deselect pool when clicking a node
     s.pushHistory();
     const currentSelected = useFlowchartStore.getState().selectedIds;
     const dragNodeIds = currentSelected.includes(nodeId) ? currentSelected : [nodeId];
@@ -294,7 +348,6 @@ export const Canvas: React.FC = () => {
   const handleEditDone = (nodeId: string, label: string) => {
     const node = nodes.find(n => n.id === nodeId);
     store.updateNodeLabel(nodeId, label);
-    // Auto-expand height for multiline text
     if (node) {
       const lines = label.split('\n');
       const lineHeight = node.style.fontSize * 1.4;
@@ -304,6 +357,40 @@ export const Canvas: React.FC = () => {
       }
     }
     setEditingNodeId(null);
+  };
+
+  // Swimlane handlers
+  const handleLaneHeaderClick = (poolId: string, laneId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    store.clearSelection();
+    swimlaneStore.selectLane(poolId, laneId);
+  };
+
+  const handlePoolMouseDown = (poolId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    store.clearSelection();
+    swimlaneStore.selectPool(poolId);
+    const pool = pools.find(p => p.id === poolId);
+    if (!pool) return;
+    const pos = screenToCanvas(e.clientX, e.clientY);
+    setPoolDragState({ poolId, offsetX: pos.x - pool.x, offsetY: pos.y - pool.y });
+  };
+
+  const handleAddLane = (poolId: string) => {
+    swimlaneStore.addLane(poolId);
+  };
+
+  const handleLaneDividerMouseDown = (poolId: string, laneId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const pool = pools.find(p => p.id === poolId);
+    const lane = pool?.lanes.find(l => l.id === laneId);
+    if (!pool || !lane) return;
+    const isH = pool.orientation === 'horizontal';
+    setLaneDividerDrag({
+      poolId, laneId,
+      startPos: isH ? e.clientY : e.clientX,
+      origSize: lane.sizePx,
+    });
   };
 
   // Temp connection line
@@ -318,8 +405,6 @@ export const Canvas: React.FC = () => {
   }
 
   const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'default';
-
-  // Dimension tooltip for resize
   const resizingNode = resizeState ? nodes.find(n => n.id === resizeState.nodeId) : null;
 
   return (
@@ -355,6 +440,20 @@ export const Canvas: React.FC = () => {
         {!canvas.grid.enabled && <rect className="canvas-bg" width="100%" height="100%" fill="transparent" />}
 
         <g transform={`translate(${canvas.offset.x},${canvas.offset.y}) scale(${canvas.zoom})`}>
+          {/* Swimlane pools (rendered behind nodes) */}
+          {pools.map(pool => (
+            <SwimlaneRenderer
+              key={pool.id}
+              pool={pool}
+              selectedPoolId={swimlaneStore.selectedPoolId}
+              selectedLaneId={swimlaneStore.selectedLaneId}
+              onHeaderClick={handleLaneHeaderClick}
+              onPoolMouseDown={handlePoolMouseDown}
+              onAddLane={handleAddLane}
+              onLaneDividerMouseDown={handleLaneDividerMouseDown}
+            />
+          ))}
+
           {edges.map(edge => (
             <EdgeLine key={edge.id} edge={edge} nodes={nodes} selected={selectedIds.includes(edge.id)} onClick={handleEdgeClick} />
           ))}

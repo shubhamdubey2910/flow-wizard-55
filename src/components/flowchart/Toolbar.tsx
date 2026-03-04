@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Upload, ChevronDown } from 'lucide-react';
+import { Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Upload, ChevronDown, Rows3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFlowchartStore } from '@/stores/flowchartStore';
+import { useSwimlaneStore } from '@/stores/swimlaneStore';
 
 const getSvgElement = (): SVGSVGElement | null => document.querySelector('svg.flowchart-canvas');
 
-/**
- * Compute content bounding box from the store nodes/edges rather than SVG getBBox,
- * so we can reliably center and exclude grid dots.
- */
 const getContentBounds = () => {
   const { nodes } = useFlowchartStore.getState();
   if (!nodes.length) return null;
@@ -33,21 +30,15 @@ const rasterize = (svgEl: SVGSVGElement, format: 'png' | 'jpeg'): Promise<Blob> 
     const scale = 2;
 
     const clone = svgEl.cloneNode(true) as SVGSVGElement;
-    
-    // Remove grid background elements from the clone
     const gridBg = clone.querySelector('.grid-bg');
     if (gridBg) gridBg.remove();
     const gridPattern = clone.querySelector('#grid');
     if (gridPattern) gridPattern.remove();
-    
-    // Remove selection indicators
     clone.querySelectorAll('[stroke-dasharray="5 3"]').forEach(el => el.remove());
 
-    // Set viewBox centered on content
     clone.setAttribute('viewBox', `${bounds.x - pad} ${bounds.y - pad} ${w} ${h}`);
     clone.setAttribute('width', String(w * scale));
     clone.setAttribute('height', String(h * scale));
-    // Remove any transform on the content group — we use viewBox instead
     const contentG = clone.querySelector('g[transform]');
     if (contentG) contentG.removeAttribute('transform');
 
@@ -58,7 +49,6 @@ const rasterize = (svgEl: SVGSVGElement, format: 'png' | 'jpeg'): Promise<Blob> 
       canvas.width = w * scale;
       canvas.height = h * scale;
       const ctx = canvas.getContext('2d')!;
-      // Always white background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
@@ -78,12 +68,16 @@ const downloadBlob = (blob: Blob, name: string) => {
 
 export const Toolbar: React.FC = () => {
   const { canvas, past, future, undo, redo, setZoom, setOffset, toggleGrid, importJSON } = useFlowchartStore();
+  const swimlaneStore = useSwimlaneStore();
   const [showMenu, setShowMenu] = useState(false);
+  const [showSwimMenu, setShowSwimMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const swimMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+      if (swimMenuRef.current && !swimMenuRef.current.contains(e.target as Node)) setShowSwimMenu(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -106,7 +100,6 @@ export const Toolbar: React.FC = () => {
         const w = img.width / 2;
         const h = img.height / 2;
         const pdf = new jsPDF({ orientation: w > h ? 'landscape' : 'portrait', unit: 'px', format: [w + 40, h + 40] });
-        // Center the image in the PDF page
         pdf.addImage(url, 'PNG', 20, 20, w, h);
         pdf.save('flowchart.pdf');
         URL.revokeObjectURL(url);
@@ -123,6 +116,11 @@ export const Toolbar: React.FC = () => {
       if (file) importJSON(await file.text());
     };
     input.click();
+  };
+
+  const handleInsertSwimlane = (orientation: 'horizontal' | 'vertical') => {
+    setShowSwimMenu(false);
+    swimlaneStore.createPool(orientation, 100, 100, 3);
   };
 
   return (
@@ -161,6 +159,25 @@ export const Toolbar: React.FC = () => {
       <Button variant="ghost" size="icon" className={`h-8 w-8 ${canvas.grid.enabled ? 'bg-accent' : ''}`} onClick={toggleGrid} title="Toggle Grid">
         <LayoutGrid className="h-4 w-4" />
       </Button>
+
+      <div className="h-5 w-px bg-border mx-1" />
+
+      {/* Swimlane insert */}
+      <div className="relative" ref={swimMenuRef}>
+        <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setShowSwimMenu(!showSwimMenu)} title="Insert Swimlane (L)">
+          <Rows3 className="h-3.5 w-3.5" /> Swimlane <ChevronDown className="h-3 w-3" />
+        </Button>
+        {showSwimMenu && (
+          <div className="absolute left-0 top-full mt-1 bg-popover border border-border rounded-md shadow-md py-1 z-50 min-w-[160px]">
+            <button className="w-full text-left px-3 py-1.5 text-xs text-popover-foreground hover:bg-accent transition-colors" onClick={() => handleInsertSwimlane('horizontal')}>
+              Horizontal (rows)
+            </button>
+            <button className="w-full text-left px-3 py-1.5 text-xs text-popover-foreground hover:bg-accent transition-colors" onClick={() => handleInsertSwimlane('vertical')}>
+              Vertical (columns)
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1" />
 

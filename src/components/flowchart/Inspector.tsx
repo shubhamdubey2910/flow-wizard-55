@@ -1,9 +1,10 @@
 import React from 'react';
 import { useFlowchartStore } from '@/stores/flowchartStore';
+import { useSwimlaneStore } from '@/stores/swimlaneStore';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Minus, Plus, Check } from 'lucide-react';
+import { Minus, Plus, Check, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 const COLOR_SWATCHES = [
@@ -32,9 +33,13 @@ const ColorSwatchPicker: React.FC<{ value: string; onChange: (color: string) => 
 
 export const Inspector: React.FC = () => {
   const { nodes, edges, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType } = useFlowchartStore();
+  const swimlaneStore = useSwimlaneStore();
+  const { pools, selectedPoolId, selectedLaneId } = swimlaneStore;
 
   const selectedNode = nodes.find(n => selectedIds.includes(n.id));
   const selectedEdge = edges.find(e => selectedIds.includes(e.id));
+  const selectedPool = pools.find(p => p.id === selectedPoolId);
+  const selectedLane = selectedPool?.lanes.find(l => l.id === selectedLaneId);
 
   const adjustFontSize = (delta: number) => {
     if (!selectedNode) return;
@@ -42,15 +47,22 @@ export const Inspector: React.FC = () => {
     updateNodeStyle(selectedNode.id, { fontSize: newSize });
   };
 
+  // Determine what panel to show
+  const showNode = selectedNode && !selectedPoolId;
+  const showEdge = selectedEdge && !selectedNode && !selectedPoolId;
+  const showLane = selectedLane && selectedPool;
+  const showPool = selectedPool && !selectedLane && !selectedNode;
+  const showCanvas = !showNode && !showEdge && !showLane && !showPool;
+
   return (
     <div className="w-64 bg-card border-l border-border flex flex-col">
       <div className="px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-foreground tracking-wide">
-          {selectedNode ? 'Shape' : selectedEdge ? 'Connector' : 'Canvas'}
+          {showNode ? 'Shape' : showEdge ? 'Connector' : showLane ? 'Lane' : showPool ? 'Swimlane' : 'Canvas'}
         </h2>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {selectedNode && (
+        {showNode && selectedNode && (
           <>
             <div className="space-y-1.5">
               <Label className="text-xs">Label</Label>
@@ -95,7 +107,7 @@ export const Inspector: React.FC = () => {
           </>
         )}
 
-        {selectedEdge && (
+        {showEdge && selectedEdge && (
           <>
             <div className="space-y-1.5">
               <Label className="text-xs">Type</Label>
@@ -143,7 +155,134 @@ export const Inspector: React.FC = () => {
           </>
         )}
 
-        {!selectedNode && !selectedEdge && (
+        {showPool && selectedPool && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Orientation</Label>
+              <select
+                value={selectedPool.orientation}
+                onChange={e => swimlaneStore.updatePoolProps(selectedPool.id, { orientation: e.target.value as any })}
+                className="w-full h-8 rounded border border-border bg-background text-sm px-2"
+              >
+                <option value="horizontal">Horizontal (rows)</option>
+                <option value="vertical">Vertical (columns)</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Lanes ({selectedPool.lanes.length})</Label>
+              <div className="space-y-1">
+                {selectedPool.lanes.map(lane => (
+                  <div key={lane.id} className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => swimlaneStore.selectLane(selectedPool.id, lane.id)}
+                      className="flex-1 text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors truncate"
+                    >
+                      {lane.title}
+                    </button>
+                    {selectedPool.lanes.length > 1 && (
+                      <button
+                        onClick={() => swimlaneStore.removeLane(selectedPool.id, lane.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                        title="Remove lane"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={() => swimlaneStore.addLane(selectedPool.id)}>
+                + Add Lane
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Width</Label>
+              <input
+                type="range" min={300} max={1500}
+                value={selectedPool.crossAxisSize}
+                onChange={e => swimlaneStore.updatePoolProps(selectedPool.id, { crossAxisSize: +e.target.value })}
+                className="w-full accent-primary"
+              />
+              <span className="text-[10px] text-muted-foreground">{selectedPool.crossAxisSize}px</span>
+            </div>
+            <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={() => swimlaneStore.distributeEvenly(selectedPool.id)}>
+              Distribute Evenly
+            </Button>
+            <Button variant="destructive" size="sm" className="w-full h-7 text-xs" onClick={() => swimlaneStore.removePool(selectedPool.id)}>
+              Delete Pool
+            </Button>
+          </>
+        )}
+
+        {showLane && selectedLane && selectedPool && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Title</Label>
+              <Input
+                value={selectedLane.title}
+                onChange={e => swimlaneStore.updateLaneTitle(selectedPool.id, selectedLane.id, e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Subtitle</Label>
+              <Input
+                value={selectedLane.subTitle || ''}
+                onChange={e => swimlaneStore.updateLaneProps(selectedPool.id, selectedLane.id, { subTitle: e.target.value })}
+                className="h-8 text-sm"
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Header Color</Label>
+              <ColorSwatchPicker
+                value={selectedLane.headerColor}
+                onChange={c => swimlaneStore.updateLaneProps(selectedPool.id, selectedLane.id, { headerColor: c })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Body Color</Label>
+              <ColorSwatchPicker
+                value={selectedLane.bodyColor}
+                onChange={c => swimlaneStore.updateLaneProps(selectedPool.id, selectedLane.id, { bodyColor: c })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Size</Label>
+              <input
+                type="range" min={selectedLane.minSizePx} max={600}
+                value={selectedLane.sizePx}
+                onChange={e => swimlaneStore.resizeLane(selectedPool.id, selectedLane.id, +e.target.value)}
+                className="w-full accent-primary"
+              />
+              <span className="text-[10px] text-muted-foreground">{selectedLane.sizePx}px</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selectedLane.collapsed}
+                onChange={e => swimlaneStore.updateLaneProps(selectedPool.id, selectedLane.id, { collapsed: e.target.checked })}
+                className="accent-primary"
+              />
+              <Label className="text-xs">Collapsed</Label>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1 h-7 text-xs" onClick={() => swimlaneStore.selectPool(selectedPool.id)}>
+                ← Back to Pool
+              </Button>
+              {selectedPool.lanes.length > 1 && (
+                <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={() => {
+                  swimlaneStore.removeLane(selectedPool.id, selectedLane.id);
+                  swimlaneStore.selectPool(selectedPool.id);
+                }}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+
+        {showCanvas && (
           <>
             <div className="space-y-1.5">
               <Label className="text-xs">Grid</Label>
@@ -161,6 +300,8 @@ export const Inspector: React.FC = () => {
                 <span>Zoom</span><span className="text-right">Scroll</span>
                 <span>Edit text</span><span className="text-right">Double-click</span>
                 <span>Multi-select</span><span className="text-right">Shift+click</span>
+                <span>Swimlane</span><span className="text-right">L</span>
+                <span>Toggle orient.</span><span className="text-right">Shift+L</span>
               </div>
             </div>
           </>
