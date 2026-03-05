@@ -478,6 +478,7 @@ export const Canvas: React.FC = () => {
               onAddLane={handleAddLane}
               onLaneDividerMouseDown={handleLaneDividerMouseDown}
               onPoolEdgeResize={handlePoolEdgeResize}
+              onDropShape={(type, x, y) => store.addNode(type, x, y)}
             />
           ))}
 
