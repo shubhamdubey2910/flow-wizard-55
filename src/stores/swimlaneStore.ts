@@ -29,6 +29,7 @@ interface SwimlaneStore {
   updateLaneProps: (poolId: string, laneId: string, props: Partial<Lane>) => void;
   movePool: (poolId: string, x: number, y: number) => void;
   distributeEvenly: (poolId: string) => void;
+  resizePoolCrossAxis: (poolId: string, size: number) => void;
   selectPool: (poolId: string | null) => void;
   selectLane: (poolId: string | null, laneId: string | null) => void;
   selectedPoolId: string | null;
@@ -138,6 +139,10 @@ export const useSwimlaneStore = create<SwimlaneStore>((set, get) => ({
       const evenSize = Math.max(120, Math.floor(totalSize / p.lanes.length));
       return { ...p, lanes: p.lanes.map(l => ({ ...l, sizePx: evenSize })) };
     }),
+  })),
+
+  resizePoolCrossAxis: (poolId, size) => set(s => ({
+    pools: s.pools.map(p => p.id !== poolId ? p : { ...p, crossAxisSize: Math.max(200, size) }),
   })),
 }));
 
