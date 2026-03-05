@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SwimlanePool, LANE_HEADER_H, POOL_BORDER } from '@/types/swimlane';
 import { getLaneBounds } from '@/stores/swimlaneStore';
+import { ShapeType } from '@/types/flowchart';
 
 interface Props {
   pool: SwimlanePool;
@@ -11,19 +12,29 @@ interface Props {
   onAddLane: (poolId: string) => void;
   onLaneDividerMouseDown: (poolId: string, laneId: string, e: React.MouseEvent) => void;
   onPoolEdgeResize: (poolId: string, e: React.MouseEvent) => void;
+  onDropShape?: (type: ShapeType, x: number, y: number) => void;
 }
 
 const RESIZE_HANDLE_SIZE = 10;
 
+const QUICK_SHAPES: { type: ShapeType; label: string; icon: string }[] = [
+  { type: 'process', label: 'Process', icon: '▭' },
+  { type: 'decision', label: 'Decision', icon: '◇' },
+  { type: 'terminator', label: 'Start/End', icon: '⬭' },
+  { type: 'database', label: 'Database', icon: '⛁' },
+];
+
 export const SwimlaneRenderer: React.FC<Props> = ({
   pool, selectedPoolId, selectedLaneId,
-  onHeaderClick, onPoolMouseDown, onAddLane, onLaneDividerMouseDown, onPoolEdgeResize,
+  onHeaderClick, onPoolMouseDown, onAddLane, onLaneDividerMouseDown, onPoolEdgeResize, onDropShape,
 }) => {
   const isHorizontal = pool.orientation === 'horizontal';
   const totalMainAxis = pool.lanes.reduce((sum, l) => sum + (l.collapsed ? LANE_HEADER_H : l.sizePx), 0);
   const poolW = isHorizontal ? pool.crossAxisSize : totalMainAxis;
   const poolH = isHorizontal ? totalMainAxis : pool.crossAxisSize;
   const isPoolSelected = selectedPoolId === pool.id;
+
+  const [hoveredLaneId, setHoveredLaneId] = useState<string | null>(null);
 
   return (
     <g>
@@ -44,6 +55,7 @@ export const SwimlaneRenderer: React.FC<Props> = ({
         const b = getLaneBounds(pool, lane);
         const isSelected = selectedLaneId === lane.id && selectedPoolId === pool.id;
         const isLastLane = lane.index === pool.lanes.length - 1;
+        const isHovered = hoveredLaneId === lane.id && !lane.collapsed;
 
         return (
           <g key={lane.id}>
@@ -54,7 +66,82 @@ export const SwimlaneRenderer: React.FC<Props> = ({
               fill={lane.bodyColor}
               fillOpacity={0.5}
               stroke="none"
+              onMouseEnter={() => setHoveredLaneId(lane.id)}
+              onMouseLeave={() => setHoveredLaneId(null)}
             />
+
+            {/* Quick-add node palette on hover */}
+            {isHovered && !lane.collapsed && (() => {
+              const headerOffset = isHorizontal ? LANE_HEADER_H : LANE_HEADER_H;
+              const paletteW = QUICK_SHAPES.length * 36 + 8;
+              const paletteH = 32;
+              const px = isHorizontal
+                ? b.x + b.w / 2 - paletteW / 2
+                : b.x + headerOffset + (b.w - headerOffset) / 2 - paletteW / 2;
+              const py = isHorizontal
+                ? b.y + headerOffset + (b.h - headerOffset) / 2 - paletteH / 2
+                : b.y + b.h / 2 - paletteH / 2;
+
+              return (
+                <g
+                  onMouseEnter={() => setHoveredLaneId(lane.id)}
+                  onMouseLeave={() => setHoveredLaneId(null)}
+                >
+                  <rect
+                    x={px - 4} y={py - 4}
+                    width={paletteW + 8} height={paletteH + 8}
+                    rx={8}
+                    fill="white"
+                    fillOpacity={0.95}
+                    stroke="hsl(220,15%,80%)"
+                    strokeWidth={1}
+                    filter="drop-shadow(0 2px 6px rgba(0,0,0,0.12))"
+                  />
+                  {QUICK_SHAPES.map((shape, i) => {
+                    const bx = px + 4 + i * 36;
+                    const by = py;
+                    const centerX = isHorizontal
+                      ? b.x + b.w / 2
+                      : b.x + headerOffset + (b.w - headerOffset) / 2;
+                    const centerY = isHorizontal
+                      ? b.y + headerOffset + (b.h - headerOffset) / 2
+                      : b.y + b.h / 2;
+
+                    return (
+                      <g
+                        key={shape.type}
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDropShape?.(shape.type, centerX, centerY);
+                        }}
+                      >
+                        <rect
+                          x={bx} y={by}
+                          width={32} height={32}
+                          rx={6}
+                          fill="hsl(275,30%,96%)"
+                          stroke="hsl(280,40%,80%)"
+                          strokeWidth={1}
+                          className="hover-shape-btn"
+                        />
+                        <text
+                          x={bx + 16} y={by + 20}
+                          textAnchor="middle"
+                          fontSize={16}
+                          fill="hsl(280,60%,40%)"
+                          style={{ pointerEvents: 'none', userSelect: 'none' }}
+                        >
+                          {shape.icon}
+                        </text>
+                        {/* Tooltip */}
+                        <title>{shape.label}</title>
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })()}
 
             {/* Lane header strip */}
             {isHorizontal ? (
@@ -138,13 +225,11 @@ export const SwimlaneRenderer: React.FC<Props> = ({
                   style={{ cursor: 'row-resize' }}
                   onMouseDown={(e) => { e.stopPropagation(); onLaneDividerMouseDown(pool.id, lane.id, e); }}
                 >
-                  {/* Wide transparent hit area */}
                   <rect
                     x={b.x} y={b.y + b.h - 5}
                     width={b.w} height={10}
                     fill="transparent"
                   />
-                  {/* Visible divider line */}
                   <line
                     x1={b.x} y1={b.y + b.h}
                     x2={b.x + b.w} y2={b.y + b.h}
@@ -152,17 +237,6 @@ export const SwimlaneRenderer: React.FC<Props> = ({
                     strokeWidth={1}
                     style={{ pointerEvents: 'none' }}
                   />
-                  {/* Hover highlight */}
-                  <rect
-                    x={b.x} y={b.y + b.h - 2}
-                    width={b.w} height={4}
-                    fill="hsl(280,70%,35%)"
-                    fillOpacity={0}
-                    className="divider-highlight"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    <set attributeName="fill-opacity" to="0.3" begin="mouseover" end="mouseout" />
-                  </rect>
                 </g>
               ) : (
                 <g
@@ -201,7 +275,7 @@ export const SwimlaneRenderer: React.FC<Props> = ({
         );
       })}
 
-      {/* Pool cross-axis resize handle (right edge for horizontal, bottom edge for vertical) */}
+      {/* Pool cross-axis resize handle */}
       {isPoolSelected && (
         isHorizontal ? (
           <g
@@ -213,7 +287,6 @@ export const SwimlaneRenderer: React.FC<Props> = ({
               width={8} height={poolH}
               fill="transparent"
             />
-            {/* Visual handle dots */}
             <rect x={pool.x + poolW - 2} y={pool.y + poolH / 2 - 12} width={3} height={24} rx={1.5} fill="hsl(280,70%,35%)" fillOpacity={0.5} />
           </g>
         ) : (

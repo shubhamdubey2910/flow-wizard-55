@@ -227,12 +227,11 @@ export const Canvas: React.FC = () => {
       if (e.shiftKey) {
         if (Math.abs(dx) > Math.abs(dy)) { dy = 0; } else { dx = 0; }
       }
-      for (const nodeId of dragState.nodeIds) {
-        const off = dragState.offsets[nodeId];
-        if (off) {
-          s.moveNode(nodeId, off.x + dx, off.y + dy);
-        }
-      }
+      // Batch move all nodes atomically to preserve relative positions (prevents straight connectors from flickering to elbow)
+      const moves = dragState.nodeIds
+        .filter(id => dragState.offsets[id])
+        .map(id => ({ id, x: dragState.offsets[id].x + dx, y: dragState.offsets[id].y + dy }));
+      s.moveNodes(moves);
       return;
     }
     if (connectState) {
@@ -479,6 +478,7 @@ export const Canvas: React.FC = () => {
               onAddLane={handleAddLane}
               onLaneDividerMouseDown={handleLaneDividerMouseDown}
               onPoolEdgeResize={handlePoolEdgeResize}
+              onDropShape={(type, x, y) => store.addNode(type, x, y)}
             />
           ))}
 
