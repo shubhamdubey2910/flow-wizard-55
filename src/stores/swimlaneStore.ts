@@ -29,6 +29,7 @@ interface SwimlaneStore {
   updateLaneProps: (poolId: string, laneId: string, props: Partial<Lane>) => void;
   movePool: (poolId: string, x: number, y: number) => void;
   distributeEvenly: (poolId: string) => void;
+  resizePoolCrossAxis: (poolId: string, size: number) => void;
   selectPool: (poolId: string | null) => void;
   selectLane: (poolId: string | null, laneId: string | null) => void;
   selectedPoolId: string | null;

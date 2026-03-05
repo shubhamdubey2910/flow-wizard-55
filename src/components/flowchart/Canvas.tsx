@@ -19,6 +19,7 @@ interface ResizeState {
 }
 interface PoolDragState { poolId: string; offsetX: number; offsetY: number; }
 interface LaneDividerDragState { poolId: string; laneId: string; startPos: number; origSize: number; }
+interface PoolResizeState { poolId: string; startPos: number; origSize: number; }
 
 export const Canvas: React.FC = () => {
   const store = useFlowchartStore();

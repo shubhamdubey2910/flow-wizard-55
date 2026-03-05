@@ -21,7 +21,7 @@ export function getNearestPort(node: FlowNode, point: Point): PortDirection {
   return nearest;
 }
 
-const SNAP_TOLERANCE = 6;
+const SNAP_TOLERANCE = 8;
 
 function isAligned(start: Point, end: Point, threshold = SNAP_TOLERANCE): { horizontal: boolean; vertical: boolean } {
   return {
