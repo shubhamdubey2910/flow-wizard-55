@@ -410,15 +410,14 @@ export const Canvas: React.FC = () => {
 
   const handleLaneDividerMouseDown = (poolId: string, laneId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setLaneDividerDrag({ poolId, laneId, startPos: 0, origSize: 0 });
+  };
+
+  const handlePoolEdgeResize = (poolId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     const pool = pools.find(p => p.id === poolId);
-    const lane = pool?.lanes.find(l => l.id === laneId);
-    if (!pool || !lane) return;
-    const isH = pool.orientation === 'horizontal';
-    setLaneDividerDrag({
-      poolId, laneId,
-      startPos: isH ? e.clientY : e.clientX,
-      origSize: lane.sizePx,
-    });
+    if (!pool) return;
+    setPoolResizeState({ poolId, startPos: 0, origSize: pool.crossAxisSize });
   };
 
   // Temp connection line
