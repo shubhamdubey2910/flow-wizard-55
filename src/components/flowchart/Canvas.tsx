@@ -248,6 +248,7 @@ export const Canvas: React.FC = () => {
   const handleMouseUp = () => {
     if (panState) { setPanState(null); return; }
     if (laneDividerDrag) { setLaneDividerDrag(null); return; }
+    if (poolResizeState) { setPoolResizeState(null); return; }
     if (poolDragState) { setPoolDragState(null); return; }
     if (resizeState) { setResizeState(null); setSmartGuides([]); return; }
     if (dragState) {
