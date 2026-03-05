@@ -478,6 +478,7 @@ export const Canvas: React.FC = () => {
               onPoolMouseDown={handlePoolMouseDown}
               onAddLane={handleAddLane}
               onLaneDividerMouseDown={handleLaneDividerMouseDown}
+              onPoolEdgeResize={handlePoolEdgeResize}
             />
           ))}
 
