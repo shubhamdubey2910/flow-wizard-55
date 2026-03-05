@@ -50,6 +50,7 @@ interface FlowchartStore {
 
   addNode: (type: ShapeType, x: number, y: number) => string;
   moveNode: (id: string, x: number, y: number) => void;
+  moveNodes: (moves: { id: string; x: number; y: number }[]) => void;
   resizeNode: (id: string, x: number, y: number, w: number, h: number) => void;
   updateNodeLabel: (id: string, label: string) => void;
   updateNodeStyle: (id: string, style: Partial<FlowNode['style']>) => void;
@@ -114,6 +115,20 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     const sx = grid.enabled ? Math.round(x / grid.size) * grid.size : x;
     const sy = grid.enabled ? Math.round(y / grid.size) * grid.size : y;
     return { nodes: s.nodes.map(n => n.id === id ? { ...n, x: sx, y: sy } : n) };
+  }),
+
+  moveNodes: (moves) => set(s => {
+    const { grid } = s.canvas;
+    const moveMap = new Map(moves.map(m => [m.id, m]));
+    return {
+      nodes: s.nodes.map(n => {
+        const m = moveMap.get(n.id);
+        if (!m) return n;
+        const sx = grid.enabled ? Math.round(m.x / grid.size) * grid.size : m.x;
+        const sy = grid.enabled ? Math.round(m.y / grid.size) * grid.size : m.y;
+        return { ...n, x: sx, y: sy };
+      }),
+    };
   }),
 
   resizeNode: (id, x, y, w, h) => set(s => {
