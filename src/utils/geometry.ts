@@ -38,11 +38,11 @@ export function simplifyPath(pts: Point[]): Point[] {
     const prev = result[result.length - 1];
     const curr = pts[i];
     const next = pts[i + 1];
-    // Skip if segment is < 1px (micro-stub)
-    if (Math.abs(curr.x - prev.x) < 1 && Math.abs(curr.y - prev.y) < 1) continue;
+    // Skip if segment is < 2px (micro-stub)
+    if (Math.abs(curr.x - prev.x) < 2 && Math.abs(curr.y - prev.y) < 2) continue;
     // Skip if collinear with prev and next
-    const collinearH = Math.abs(prev.y - curr.y) < 1 && Math.abs(curr.y - next.y) < 1;
-    const collinearV = Math.abs(prev.x - curr.x) < 1 && Math.abs(curr.x - next.x) < 1;
+    const collinearH = Math.abs(prev.y - curr.y) < 2 && Math.abs(curr.y - next.y) < 2;
+    const collinearV = Math.abs(prev.x - curr.x) < 2 && Math.abs(curr.x - next.x) < 2;
     if (collinearH || collinearV) continue;
     result.push(curr);
   }
@@ -55,15 +55,15 @@ export function getManhattanRoute(
   sourcePort: PortDirection, targetPort: PortDirection
 ): Point[] {
   const aligned = isAligned(start, end);
-  const isVerticalPair = (sourcePort === 'S' && targetPort === 'N') || (sourcePort === 'N' && targetPort === 'S');
-  const isHorizontalPair = (sourcePort === 'E' && targetPort === 'W') || (sourcePort === 'W' && targetPort === 'E');
 
-  // Straight-line shortcut: snap the minor axis so the line is perfectly straight
-  if (isVerticalPair && aligned.vertical) {
+  // General straight-line: if X coords align within tolerance, draw a straight vertical line
+  // regardless of which ports are used
+  if (aligned.vertical) {
     const avgX = (start.x + end.x) / 2;
     return [{ x: avgX, y: start.y }, { x: avgX, y: end.y }];
   }
-  if (isHorizontalPair && aligned.horizontal) {
+  // If Y coords align within tolerance, draw a straight horizontal line
+  if (aligned.horizontal) {
     const avgY = (start.y + end.y) / 2;
     return [{ x: start.x, y: avgY }, { x: end.x, y: avgY }];
   }

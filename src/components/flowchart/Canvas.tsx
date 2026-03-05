@@ -40,6 +40,7 @@ export const Canvas: React.FC = () => {
   const [smartGuides, setSmartGuides] = useState<SmartGuide[]>([]);
   const [poolDragState, setPoolDragState] = useState<PoolDragState | null>(null);
   const [laneDividerDrag, setLaneDividerDrag] = useState<LaneDividerDragState | null>(null);
+  const [poolResizeState, setPoolResizeState] = useState<PoolResizeState | null>(null);
 
   const screenToCanvas = useCallback((cx: number, cy: number) => {
     const { canvas: c } = useFlowchartStore.getState();
@@ -92,6 +93,11 @@ export const Canvas: React.FC = () => {
       if (e.code === 'Delete' || e.code === 'Backspace') useFlowchartStore.getState().deleteSelected();
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? useFlowchartStore.getState().redo() : useFlowchartStore.getState().undo(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); useFlowchartStore.getState().redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') {
+        e.preventDefault();
+        const s = useFlowchartStore.getState();
+        s.select([...s.nodes.map(n => n.id), ...s.edges.map(ed => ed.id)]);
+      }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') { e.preventDefault(); useFlowchartStore.getState().copySelected(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') { e.preventDefault(); useFlowchartStore.getState().cutSelected(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV') {

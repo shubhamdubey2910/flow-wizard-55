@@ -140,6 +140,10 @@ export const useSwimlaneStore = create<SwimlaneStore>((set, get) => ({
       return { ...p, lanes: p.lanes.map(l => ({ ...l, sizePx: evenSize })) };
     }),
   })),
+
+  resizePoolCrossAxis: (poolId, size) => set(s => ({
+    pools: s.pools.map(p => p.id !== poolId ? p : { ...p, crossAxisSize: Math.max(200, size) }),
+  })),
 }));
 
 /** Get the bounding rectangle of a specific lane within its pool (canvas coordinates) */
