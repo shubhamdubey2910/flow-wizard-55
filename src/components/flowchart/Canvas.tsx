@@ -87,9 +87,9 @@ export const Canvas: React.FC = () => {
   // Keyboard shortcuts
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !e.repeat) { spaceRef.current = true; e.preventDefault(); }
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'Space' && !e.repeat) { spaceRef.current = true; e.preventDefault(); }
       if (e.code === 'Delete' || e.code === 'Backspace') useFlowchartStore.getState().deleteSelected();
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? useFlowchartStore.getState().redo() : useFlowchartStore.getState().undo(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); useFlowchartStore.getState().redo(); }
