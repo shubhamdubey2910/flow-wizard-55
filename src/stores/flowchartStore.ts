@@ -74,6 +74,9 @@ interface FlowchartStore {
   exportJSON: () => string;
   importJSON: (json: string) => void;
   loadDemo: () => void;
+  addFreeformLine: (start: Point, end: Point) => void;
+  updateFreeformLineStyle: (id: string, style: Partial<EdgeStyle>) => void;
+  setActiveTool: (tool: 'select' | 'line') => void;
 }
 
 const DEFAULT_STYLE: FlowNode['style'] = {
