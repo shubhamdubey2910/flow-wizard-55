@@ -274,7 +274,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
       nodes: [...s.nodes, ...newNodes],
       edges: [...s.edges, ...newEdges],
       selectedIds: newNodes.map(n => n.id),
-      clipboard: { nodes: updatedClipNodes, edges: clipboard.edges },
+      clipboard: { nodes: updatedClipNodes, edges: clipboard.edges, freeformLines: clipboard.freeformLines },
     }));
   },
 
