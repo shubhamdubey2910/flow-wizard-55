@@ -208,13 +208,13 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   undo: () => set(s => {
     if (!s.past.length) return s;
     const prev = s.past[s.past.length - 1];
-    return { past: s.past.slice(0, -1), future: [{ nodes: s.nodes, edges: s.edges }, ...s.future.slice(0, 30)], nodes: prev.nodes, edges: prev.edges, selectedIds: [] };
+    return { past: s.past.slice(0, -1), future: [{ nodes: s.nodes, edges: s.edges, freeformLines: s.freeformLines }, ...s.future.slice(0, 30)], nodes: prev.nodes, edges: prev.edges, freeformLines: prev.freeformLines, selectedIds: [] };
   }),
 
   redo: () => set(s => {
     if (!s.future.length) return s;
     const next = s.future[0];
-    return { future: s.future.slice(1), past: [...s.past, { nodes: s.nodes, edges: s.edges }], nodes: next.nodes, edges: next.edges, selectedIds: [] };
+    return { future: s.future.slice(1), past: [...s.past, { nodes: s.nodes, edges: s.edges, freeformLines: s.freeformLines }], nodes: next.nodes, edges: next.edges, freeformLines: next.freeformLines, selectedIds: [] };
   }),
 
   copySelected: () => {
