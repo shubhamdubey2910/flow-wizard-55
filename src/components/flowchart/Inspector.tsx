@@ -51,9 +51,10 @@ export const Inspector: React.FC = () => {
   // Determine what panel to show
   const showNode = selectedNode && !selectedPoolId;
   const showEdge = selectedEdge && !selectedNode && !selectedPoolId;
+  const showFreeformLine = selectedFreeformLine && !selectedNode && !selectedEdge && !selectedPoolId;
   const showLane = selectedLane && selectedPool;
   const showPool = selectedPool && !selectedLane && !selectedNode;
-  const showCanvas = !showNode && !showEdge && !showLane && !showPool;
+  const showCanvas = !showNode && !showEdge && !showFreeformLine && !showLane && !showPool;
 
   return (
     <div className="w-64 bg-card border-l border-border flex flex-col">
