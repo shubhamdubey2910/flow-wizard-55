@@ -168,6 +168,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     set(s => ({
       nodes: s.nodes.filter(n => !selectedIds.includes(n.id)),
       edges: s.edges.filter(e => !selectedIds.includes(e.id) && !selectedIds.includes(e.source.nodeId) && !selectedIds.includes(e.target.nodeId)),
+      freeformLines: s.freeformLines.filter(l => !selectedIds.includes(l.id)),
       selectedIds: [],
     }));
   },
