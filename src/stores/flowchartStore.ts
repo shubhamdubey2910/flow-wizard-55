@@ -86,11 +86,13 @@ const DEFAULT_STYLE: FlowNode['style'] = {
 export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   nodes: [],
   edges: [],
+  freeformLines: [],
   selectedIds: [],
   canvas: { zoom: 1, offset: { x: 0, y: 0 }, grid: { enabled: true, size: 8 } },
   past: [],
   future: [],
-  clipboard: { nodes: [], edges: [] },
+  clipboard: { nodes: [], edges: [], freeformLines: [] },
+  activeTool: 'select',
 
   pushHistory: () => set(s => ({
     past: [...s.past.slice(-30), { nodes: JSON.parse(JSON.stringify(s.nodes)), edges: JSON.parse(JSON.stringify(s.edges)) }],
