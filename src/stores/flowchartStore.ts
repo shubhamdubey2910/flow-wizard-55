@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FlowNode, FlowEdge, CanvasState, ShapeType, PortDirection, Point } from '@/types/flowchart';
+import { FlowNode, FlowEdge, CanvasState, ShapeType, PortDirection, Point, FreeformLine, EdgeStyle } from '@/types/flowchart';
 
 let counter = 0;
 const genId = () => `id-${Date.now()}-${++counter}`;
