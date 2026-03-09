@@ -278,8 +278,8 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   },
 
   exportJSON: () => {
-    const { nodes, edges, canvas } = get();
-    return JSON.stringify({ version: '1.0', canvas, nodes, edges }, null, 2);
+    const { nodes, edges, freeformLines, canvas } = get();
+    return JSON.stringify({ version: '1.0', canvas, nodes, edges, freeformLines }, null, 2);
   },
 
   importJSON: (json) => {
