@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Upload, ChevronDown, Rows3 } from 'lucide-react';
+import { Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Upload, ChevronDown, Rows3, MousePointer2, Slash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFlowchartStore } from '@/stores/flowchartStore';
 import { useSwimlaneStore } from '@/stores/swimlaneStore';
@@ -67,7 +67,7 @@ const downloadBlob = (blob: Blob, name: string) => {
 };
 
 export const Toolbar: React.FC = () => {
-  const { canvas, past, future, undo, redo, setZoom, setOffset, toggleGrid, importJSON } = useFlowchartStore();
+  const { canvas, past, future, activeTool, undo, redo, setZoom, setOffset, toggleGrid, importJSON, setActiveTool } = useFlowchartStore();
   const swimlaneStore = useSwimlaneStore();
   const [showMenu, setShowMenu] = useState(false);
   const [showSwimMenu, setShowSwimMenu] = useState(false);
@@ -158,6 +158,16 @@ export const Toolbar: React.FC = () => {
 
       <Button variant="ghost" size="icon" className={`h-8 w-8 ${canvas.grid.enabled ? 'bg-accent' : ''}`} onClick={toggleGrid} title="Toggle Grid">
         <LayoutGrid className="h-4 w-4" />
+      </Button>
+
+      <div className="h-5 w-px bg-border mx-1" />
+
+      {/* Tool selection */}
+      <Button variant="ghost" size="icon" className={`h-8 w-8 ${activeTool === 'select' ? 'bg-accent' : ''}`} onClick={() => setActiveTool('select')} title="Select (V)">
+        <MousePointer2 className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" className={`h-8 w-8 ${activeTool === 'line' ? 'bg-accent' : ''}`} onClick={() => setActiveTool('line')} title="Draw Line">
+        <Slash className="h-4 w-4" />
       </Button>
 
       <div className="h-5 w-px bg-border mx-1" />

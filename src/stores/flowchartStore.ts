@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FlowNode, FlowEdge, CanvasState, ShapeType, PortDirection, Point } from '@/types/flowchart';
+import { FlowNode, FlowEdge, CanvasState, ShapeType, PortDirection, Point, FreeformLine, EdgeStyle } from '@/types/flowchart';
 
 let counter = 0;
 const genId = () => `id-${Date.now()}-${++counter}`;
@@ -36,17 +36,19 @@ const defaultLabels: Record<ShapeType, string> = {
   exception: 'Error',
 };
 
-interface Snapshot { nodes: FlowNode[]; edges: FlowEdge[]; }
-interface Clipboard { nodes: FlowNode[]; edges: FlowEdge[]; }
+interface Snapshot { nodes: FlowNode[]; edges: FlowEdge[]; freeformLines: FreeformLine[]; }
+interface Clipboard { nodes: FlowNode[]; edges: FlowEdge[]; freeformLines: FreeformLine[]; }
 
 interface FlowchartStore {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  freeformLines: FreeformLine[];
   selectedIds: string[];
   canvas: CanvasState;
   past: Snapshot[];
   future: Snapshot[];
   clipboard: Clipboard;
+  activeTool: 'select' | 'line';
 
   addNode: (type: ShapeType, x: number, y: number) => string;
   moveNode: (id: string, x: number, y: number) => void;
@@ -72,6 +74,9 @@ interface FlowchartStore {
   exportJSON: () => string;
   importJSON: (json: string) => void;
   loadDemo: () => void;
+  addFreeformLine: (start: Point, end: Point) => void;
+  updateFreeformLineStyle: (id: string, style: Partial<EdgeStyle>) => void;
+  setActiveTool: (tool: 'select' | 'line') => void;
 }
 
 const DEFAULT_STYLE: FlowNode['style'] = {
@@ -81,14 +86,16 @@ const DEFAULT_STYLE: FlowNode['style'] = {
 export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   nodes: [],
   edges: [],
+  freeformLines: [],
   selectedIds: [],
   canvas: { zoom: 1, offset: { x: 0, y: 0 }, grid: { enabled: true, size: 8 } },
   past: [],
   future: [],
-  clipboard: { nodes: [], edges: [] },
+  clipboard: { nodes: [], edges: [], freeformLines: [] },
+  activeTool: 'select',
 
   pushHistory: () => set(s => ({
-    past: [...s.past.slice(-30), { nodes: JSON.parse(JSON.stringify(s.nodes)), edges: JSON.parse(JSON.stringify(s.edges)) }],
+    past: [...s.past.slice(-30), { nodes: JSON.parse(JSON.stringify(s.nodes)), edges: JSON.parse(JSON.stringify(s.edges)), freeformLines: JSON.parse(JSON.stringify(s.freeformLines)) }],
     future: [],
   })),
 
@@ -161,6 +168,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     set(s => ({
       nodes: s.nodes.filter(n => !selectedIds.includes(n.id)),
       edges: s.edges.filter(e => !selectedIds.includes(e.id) && !selectedIds.includes(e.source.nodeId) && !selectedIds.includes(e.target.nodeId)),
+      freeformLines: s.freeformLines.filter(l => !selectedIds.includes(l.id)),
       selectedIds: [],
     }));
   },
@@ -200,21 +208,22 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   undo: () => set(s => {
     if (!s.past.length) return s;
     const prev = s.past[s.past.length - 1];
-    return { past: s.past.slice(0, -1), future: [{ nodes: s.nodes, edges: s.edges }, ...s.future.slice(0, 30)], nodes: prev.nodes, edges: prev.edges, selectedIds: [] };
+    return { past: s.past.slice(0, -1), future: [{ nodes: s.nodes, edges: s.edges, freeformLines: s.freeformLines }, ...s.future.slice(0, 30)], nodes: prev.nodes, edges: prev.edges, freeformLines: prev.freeformLines, selectedIds: [] };
   }),
 
   redo: () => set(s => {
     if (!s.future.length) return s;
     const next = s.future[0];
-    return { future: s.future.slice(1), past: [...s.past, { nodes: s.nodes, edges: s.edges }], nodes: next.nodes, edges: next.edges, selectedIds: [] };
+    return { future: s.future.slice(1), past: [...s.past, { nodes: s.nodes, edges: s.edges, freeformLines: s.freeformLines }], nodes: next.nodes, edges: next.edges, freeformLines: next.freeformLines, selectedIds: [] };
   }),
 
   copySelected: () => {
-    const { nodes, edges, selectedIds } = get();
+    const { nodes, edges, freeformLines, selectedIds } = get();
     const selNodes = nodes.filter(n => selectedIds.includes(n.id));
     const selNodeIds = new Set(selNodes.map(n => n.id));
     const selEdges = edges.filter(e => selNodeIds.has(e.source.nodeId) && selNodeIds.has(e.target.nodeId));
-    set({ clipboard: { nodes: JSON.parse(JSON.stringify(selNodes)), edges: JSON.parse(JSON.stringify(selEdges)) } });
+    const selLines = freeformLines.filter(l => selectedIds.includes(l.id));
+    set({ clipboard: { nodes: JSON.parse(JSON.stringify(selNodes)), edges: JSON.parse(JSON.stringify(selEdges)), freeformLines: JSON.parse(JSON.stringify(selLines)) } });
   },
 
   cutSelected: () => {
@@ -265,20 +274,20 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
       nodes: [...s.nodes, ...newNodes],
       edges: [...s.edges, ...newEdges],
       selectedIds: newNodes.map(n => n.id),
-      clipboard: { nodes: updatedClipNodes, edges: clipboard.edges },
+      clipboard: { nodes: updatedClipNodes, edges: clipboard.edges, freeformLines: clipboard.freeformLines },
     }));
   },
 
   exportJSON: () => {
-    const { nodes, edges, canvas } = get();
-    return JSON.stringify({ version: '1.0', canvas, nodes, edges }, null, 2);
+    const { nodes, edges, freeformLines, canvas } = get();
+    return JSON.stringify({ version: '1.0', canvas, nodes, edges, freeformLines }, null, 2);
   },
 
   importJSON: (json) => {
     try {
       const doc = JSON.parse(json);
       get().pushHistory();
-      set({ nodes: doc.nodes || [], edges: doc.edges || [], selectedIds: [] });
+      set({ nodes: doc.nodes || [], edges: doc.edges || [], freeformLines: doc.freeformLines || [], selectedIds: [] });
     } catch (e) { console.error('Invalid JSON', e); }
   },
 
@@ -297,6 +306,25 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
       { id: 'demo-e2', source: { nodeId: ids[1], port: 'S' }, target: { nodeId: ids[2], port: 'N' }, type: 'elbow', points: [], style: { ...edgeStyle, pattern: 'dotted' }, locked: false },
       { id: 'demo-e3', source: { nodeId: ids[2], port: 'S' }, target: { nodeId: ids[3], port: 'N' }, type: 'elbow', points: [], style: { ...edgeStyle, label: 'Yes' }, locked: false },
     ];
-    set({ nodes, edges, selectedIds: [], past: [], future: [] });
+    set({ nodes, edges, freeformLines: [], selectedIds: [], past: [], future: [] });
   },
+
+  addFreeformLine: (start, end) => {
+    get().pushHistory();
+    const id = genId();
+    set(s => ({
+      freeformLines: [...s.freeformLines, {
+        id, start, end,
+        style: { stroke: '#6A1B9A', strokeWidth: 2, pattern: 'solid', arrowStart: 'none', arrowEnd: 'triangle', label: '' },
+      }],
+      selectedIds: [id],
+    }));
+  },
+
+  updateFreeformLineStyle: (id, style) => {
+    get().pushHistory();
+    set(s => ({ freeformLines: s.freeformLines.map(l => l.id === id ? { ...l, style: { ...l.style, ...style } } : l) }));
+  },
+
+  setActiveTool: (tool) => set({ activeTool: tool }),
 }));

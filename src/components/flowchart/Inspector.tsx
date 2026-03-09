@@ -32,12 +32,13 @@ const ColorSwatchPicker: React.FC<{ value: string; onChange: (color: string) => 
 );
 
 export const Inspector: React.FC = () => {
-  const { nodes, edges, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType } = useFlowchartStore();
+  const { nodes, edges, freeformLines, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType, updateFreeformLineStyle } = useFlowchartStore();
   const swimlaneStore = useSwimlaneStore();
   const { pools, selectedPoolId, selectedLaneId } = swimlaneStore;
 
   const selectedNode = nodes.find(n => selectedIds.includes(n.id));
   const selectedEdge = edges.find(e => selectedIds.includes(e.id));
+  const selectedFreeformLine = freeformLines.find(l => selectedIds.includes(l.id));
   const selectedPool = pools.find(p => p.id === selectedPoolId);
   const selectedLane = selectedPool?.lanes.find(l => l.id === selectedLaneId);
 
@@ -50,15 +51,16 @@ export const Inspector: React.FC = () => {
   // Determine what panel to show
   const showNode = selectedNode && !selectedPoolId;
   const showEdge = selectedEdge && !selectedNode && !selectedPoolId;
+  const showFreeformLine = selectedFreeformLine && !selectedNode && !selectedEdge && !selectedPoolId;
   const showLane = selectedLane && selectedPool;
   const showPool = selectedPool && !selectedLane && !selectedNode;
-  const showCanvas = !showNode && !showEdge && !showLane && !showPool;
+  const showCanvas = !showNode && !showEdge && !showFreeformLine && !showLane && !showPool;
 
   return (
     <div className="w-64 bg-card border-l border-border flex flex-col">
       <div className="px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-foreground tracking-wide">
-          {showNode ? 'Shape' : showEdge ? 'Connector' : showLane ? 'Lane' : showPool ? 'Swimlane' : 'Canvas'}
+          {showNode ? 'Shape' : showEdge ? 'Connector' : showFreeformLine ? 'Line' : showLane ? 'Lane' : showPool ? 'Swimlane' : 'Canvas'}
         </h2>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -151,6 +153,47 @@ export const Inspector: React.FC = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Label</Label>
               <Input value={selectedEdge.style.label} onChange={e => updateEdgeStyle(selectedEdge.id, { label: e.target.value })} className="h-8 text-sm" placeholder="e.g. Yes / No" />
+            </div>
+          </>
+        )}
+
+        {showFreeformLine && selectedFreeformLine && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Line Style</Label>
+              <select value={selectedFreeformLine.style.pattern} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { pattern: e.target.value as any })} className="w-full h-8 rounded border border-border bg-background text-sm px-2">
+                <option value="solid">Solid</option>
+                <option value="dotted">Dotted</option>
+                <option value="dashed">Dashed</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Arrow Start</Label>
+                <select value={selectedFreeformLine.style.arrowStart} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { arrowStart: e.target.value as any })} className="w-full h-8 rounded border border-border bg-background text-sm px-2">
+                  <option value="none">None</option>
+                  <option value="triangle">Arrow</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Arrow End</Label>
+                <select value={selectedFreeformLine.style.arrowEnd} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { arrowEnd: e.target.value as any })} className="w-full h-8 rounded border border-border bg-background text-sm px-2">
+                  <option value="none">None</option>
+                  <option value="triangle">Arrow</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Stroke</Label>
+              <ColorSwatchPicker value={selectedFreeformLine.style.stroke} onChange={c => updateFreeformLineStyle(selectedFreeformLine.id, { stroke: c })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Width</Label>
+              <input type="range" min={1} max={6} value={selectedFreeformLine.style.strokeWidth} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { strokeWidth: +e.target.value })} className="w-full accent-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Label</Label>
+              <Input value={selectedFreeformLine.style.label} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { label: e.target.value })} className="h-8 text-sm" placeholder="e.g. Yes / No" />
             </div>
           </>
         )}

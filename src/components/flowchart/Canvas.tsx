@@ -5,7 +5,7 @@ import { ShapeNode, ResizeHandle } from './ShapeNode';
 import { EdgeLine } from './EdgeLine';
 import { SwimlaneRenderer } from './SwimlaneRenderer';
 import { getPortPosition, applyResize, computeSmartGuides, SmartGuide } from '@/utils/geometry';
-import { PortDirection, ShapeType } from '@/types/flowchart';
+import { PortDirection, ShapeType, Point } from '@/types/flowchart';
 
 interface DragState { nodeIds: string[]; offsets: Record<string, { x: number; y: number }>; }
 interface ConnectState { sourceNodeId: string; sourcePort: PortDirection; mouseX: number; mouseY: number; }
@@ -20,10 +20,11 @@ interface ResizeState {
 interface PoolDragState { poolId: string; offsetX: number; offsetY: number; }
 interface LaneDividerDragState { poolId: string; laneId: string; startPos: number; origSize: number; }
 interface PoolResizeState { poolId: string; startPos: number; origSize: number; }
+interface LineDrawState { start: Point; }
 
 export const Canvas: React.FC = () => {
   const store = useFlowchartStore();
-  const { nodes, edges, selectedIds, canvas } = store;
+  const { nodes, edges, freeformLines, selectedIds, canvas, activeTool } = store;
   const swimlaneStore = useSwimlaneStore();
   const { pools } = swimlaneStore;
   const svgRef = useRef<SVGSVGElement>(null);
@@ -41,6 +42,8 @@ export const Canvas: React.FC = () => {
   const [poolDragState, setPoolDragState] = useState<PoolDragState | null>(null);
   const [laneDividerDrag, setLaneDividerDrag] = useState<LaneDividerDragState | null>(null);
   const [poolResizeState, setPoolResizeState] = useState<PoolResizeState | null>(null);
+  const [lineDrawState, setLineDrawState] = useState<LineDrawState | null>(null);
+  const [linePreviewEnd, setLinePreviewEnd] = useState<Point | null>(null);
 
   const screenToCanvas = useCallback((cx: number, cy: number) => {
     const { canvas: c } = useFlowchartStore.getState();
@@ -89,6 +92,14 @@ export const Canvas: React.FC = () => {
     const onDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'Escape') {
+        if (useFlowchartStore.getState().activeTool === 'line') {
+          setLineDrawState(null);
+          setLinePreviewEnd(null);
+          useFlowchartStore.getState().setActiveTool('select');
+          return;
+        }
+      }
       if (e.code === 'Space' && !e.repeat) { spaceRef.current = true; e.preventDefault(); }
       if (e.code === 'Delete' || e.code === 'Backspace') useFlowchartStore.getState().deleteSelected();
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? useFlowchartStore.getState().redo() : useFlowchartStore.getState().undo(); }
@@ -96,7 +107,7 @@ export const Canvas: React.FC = () => {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') {
         e.preventDefault();
         const s = useFlowchartStore.getState();
-        s.select([...s.nodes.map(n => n.id), ...s.edges.map(ed => ed.id)]);
+        s.select([...s.nodes.map(n => n.id), ...s.edges.map(ed => ed.id), ...s.freeformLines.map(l => l.id)]);
       }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC') { e.preventDefault(); useFlowchartStore.getState().copySelected(); }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') { e.preventDefault(); useFlowchartStore.getState().cutSelected(); }
@@ -104,12 +115,16 @@ export const Canvas: React.FC = () => {
         e.preventDefault();
         useFlowchartStore.getState().pasteClipboard(lastMousePosRef.current || undefined);
       }
+      if (e.code === 'KeyV' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        useFlowchartStore.getState().setActiveTool('select');
+        setLineDrawState(null);
+        setLinePreviewEnd(null);
+      }
       // L = add swimlane
       if (e.code === 'KeyL' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         const sStore = useSwimlaneStore.getState();
         if (e.shiftKey && sStore.selectedPoolId) {
-          // Toggle orientation
           const pool = sStore.pools.find(p => p.id === sStore.selectedPoolId);
           if (pool) {
             sStore.updatePoolProps(pool.id, {
@@ -134,6 +149,21 @@ export const Canvas: React.FC = () => {
       setPanState({ startX: e.clientX, startY: e.clientY, offsetX: canvas.offset.x, offsetY: canvas.offset.y });
       return;
     }
+
+    // Line tool click
+    if (activeTool === 'line' && e.button === 0) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      if (!lineDrawState) {
+        setLineDrawState({ start: pos });
+        setLinePreviewEnd(pos);
+      } else {
+        store.addFreeformLine(lineDrawState.start, pos);
+        setLineDrawState(null);
+        setLinePreviewEnd(null);
+      }
+      return;
+    }
+
     const target = e.target as SVGElement;
     const isBackground = target === svgRef.current || target.classList.contains('canvas-bg');
     if (isBackground && e.button === 0) {
@@ -150,6 +180,12 @@ export const Canvas: React.FC = () => {
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Line tool preview
+    if (activeTool === 'line' && lineDrawState) {
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      setLinePreviewEnd(pos);
+    }
+
     if (panState) {
       useFlowchartStore.getState().setOffset({
         x: panState.offsetX + e.clientX - panState.startX,
@@ -319,6 +355,7 @@ export const Canvas: React.FC = () => {
   // --- Node interaction ---
   const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (activeTool === 'line') return; // Don't start drag in line mode
     const s = useFlowchartStore.getState();
     if (e.shiftKey) {
       const newSelection = s.selectedIds.includes(nodeId)
@@ -328,7 +365,7 @@ export const Canvas: React.FC = () => {
     } else if (!s.selectedIds.includes(nodeId)) {
       s.select([nodeId]);
     }
-    swimlaneStore.selectPool(null); // Deselect pool when clicking a node
+    swimlaneStore.selectPool(null);
     s.pushHistory();
     const currentSelected = useFlowchartStore.getState().selectedIds;
     const dragNodeIds = currentSelected.includes(nodeId) ? currentSelected : [nodeId];
@@ -369,6 +406,19 @@ export const Canvas: React.FC = () => {
       s.select(newSelection);
     } else {
       store.select([edgeId]);
+    }
+  };
+
+  const handleFreeformLineClick = (lineId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.shiftKey) {
+      const s = useFlowchartStore.getState();
+      const newSelection = s.selectedIds.includes(lineId)
+        ? s.selectedIds.filter(id => id !== lineId)
+        : [...s.selectedIds, lineId];
+      s.select(newSelection);
+    } else {
+      store.select([lineId]);
     }
   };
 
@@ -430,8 +480,27 @@ export const Canvas: React.FC = () => {
     }
   }
 
-  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : resizeState ? 'default' : 'default';
+  // Line draw preview
+  let linePreview: React.ReactNode = null;
+  if (lineDrawState && linePreviewEnd) {
+    linePreview = (
+      <line
+        x1={lineDrawState.start.x} y1={lineDrawState.start.y}
+        x2={linePreviewEnd.x} y2={linePreviewEnd.y}
+        stroke="hsl(280,70%,35%)" strokeWidth={2} strokeDasharray="6 4"
+      />
+    );
+  }
+
+  const cursorStyle = panState ? 'grabbing' : spaceRef.current ? 'grab' : activeTool === 'line' ? 'crosshair' : resizeState ? 'default' : 'default';
   const resizingNode = resizeState ? nodes.find(n => n.id === resizeState.nodeId) : null;
+
+  // Helper to get dash array for freeform lines
+  const getDashArray = (pattern: string): string | undefined => {
+    if (pattern === 'dotted') return '4 4';
+    if (pattern === 'dashed') return '8 4';
+    return undefined;
+  };
 
   return (
     <div className="flex-1 overflow-hidden relative" style={{ background: 'hsl(216,30%,95%)' }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -485,6 +554,45 @@ export const Canvas: React.FC = () => {
           {edges.map(edge => (
             <EdgeLine key={edge.id} edge={edge} nodes={nodes} selected={selectedIds.includes(edge.id)} onClick={handleEdgeClick} />
           ))}
+
+          {/* Freeform lines */}
+          {freeformLines.map(line => {
+            const isSelected = selectedIds.includes(line.id);
+            const markerEnd = line.style.arrowEnd !== 'none' ? 'url(#arrowhead)' : undefined;
+            const markerStart = line.style.arrowStart !== 'none' ? 'url(#arrowhead-start)' : undefined;
+            const midX = (line.start.x + line.end.x) / 2;
+            const midY = (line.start.y + line.end.y) / 2;
+            return (
+              <g key={line.id} onClick={(e) => handleFreeformLineClick(line.id, e)} style={{ cursor: 'pointer' }}>
+                <line
+                  x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
+                  stroke="transparent" strokeWidth={14}
+                />
+                <line
+                  x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
+                  stroke={isSelected ? '#4A148C' : line.style.stroke}
+                  strokeWidth={isSelected ? line.style.strokeWidth + 1 : line.style.strokeWidth}
+                  strokeDasharray={getDashArray(line.style.pattern)}
+                  markerEnd={markerEnd}
+                  markerStart={markerStart}
+                  strokeLinecap="round"
+                />
+                {line.style.label && (
+                  <g>
+                    <rect x={midX - 18} y={midY - 12} width={36} height={18} rx={4} fill="white" fillOpacity={0.9} />
+                    <text x={midX} y={midY - 2} textAnchor="middle" fontSize={11} fill="#333" fontFamily="system-ui, sans-serif">{line.style.label}</text>
+                  </g>
+                )}
+                {isSelected && (
+                  <>
+                    <circle cx={line.start.x} cy={line.start.y} r={4} fill="#4A148C" stroke="white" strokeWidth={1.5} />
+                    <circle cx={line.end.x} cy={line.end.y} r={4} fill="#4A148C" stroke="white" strokeWidth={1.5} />
+                  </>
+                )}
+              </g>
+            );
+          })}
+
           {nodes.map(node => (
             <ShapeNode
               key={node.id}
@@ -502,6 +610,7 @@ export const Canvas: React.FC = () => {
             />
           ))}
           {tempLine}
+          {linePreview}
 
           {/* Smart guides */}
           {smartGuides.map((g, i) => (
