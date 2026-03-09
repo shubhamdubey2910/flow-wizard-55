@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Upload, ChevronDown, Rows3 } from 'lucide-react';
+import { Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Upload, ChevronDown, Rows3, MousePointer2, Slash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFlowchartStore } from '@/stores/flowchartStore';
 import { useSwimlaneStore } from '@/stores/swimlaneStore';
