@@ -67,7 +67,7 @@ const downloadBlob = (blob: Blob, name: string) => {
 };
 
 export const Toolbar: React.FC = () => {
-  const { canvas, past, future, undo, redo, setZoom, setOffset, toggleGrid, importJSON } = useFlowchartStore();
+  const { canvas, past, future, activeTool, undo, redo, setZoom, setOffset, toggleGrid, importJSON, setActiveTool } = useFlowchartStore();
   const swimlaneStore = useSwimlaneStore();
   const [showMenu, setShowMenu] = useState(false);
   const [showSwimMenu, setShowSwimMenu] = useState(false);
