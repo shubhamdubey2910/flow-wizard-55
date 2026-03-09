@@ -60,7 +60,7 @@ export const Inspector: React.FC = () => {
     <div className="w-64 bg-card border-l border-border flex flex-col">
       <div className="px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-foreground tracking-wide">
-          {showNode ? 'Shape' : showEdge ? 'Connector' : showLane ? 'Lane' : showPool ? 'Swimlane' : 'Canvas'}
+          {showNode ? 'Shape' : showEdge ? 'Connector' : showFreeformLine ? 'Line' : showLane ? 'Lane' : showPool ? 'Swimlane' : 'Canvas'}
         </h2>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
