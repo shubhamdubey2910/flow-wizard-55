@@ -32,12 +32,13 @@ const ColorSwatchPicker: React.FC<{ value: string; onChange: (color: string) => 
 );
 
 export const Inspector: React.FC = () => {
-  const { nodes, edges, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType } = useFlowchartStore();
+  const { nodes, edges, freeformLines, selectedIds, canvas, toggleGrid, updateNodeLabel, updateNodeStyle, updateEdgeStyle, updateEdgeType, updateFreeformLineStyle } = useFlowchartStore();
   const swimlaneStore = useSwimlaneStore();
   const { pools, selectedPoolId, selectedLaneId } = swimlaneStore;
 
   const selectedNode = nodes.find(n => selectedIds.includes(n.id));
   const selectedEdge = edges.find(e => selectedIds.includes(e.id));
+  const selectedFreeformLine = freeformLines.find(l => selectedIds.includes(l.id));
   const selectedPool = pools.find(p => p.id === selectedPoolId);
   const selectedLane = selectedPool?.lanes.find(l => l.id === selectedLaneId);
 
