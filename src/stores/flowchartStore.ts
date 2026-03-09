@@ -305,6 +305,25 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
       { id: 'demo-e2', source: { nodeId: ids[1], port: 'S' }, target: { nodeId: ids[2], port: 'N' }, type: 'elbow', points: [], style: { ...edgeStyle, pattern: 'dotted' }, locked: false },
       { id: 'demo-e3', source: { nodeId: ids[2], port: 'S' }, target: { nodeId: ids[3], port: 'N' }, type: 'elbow', points: [], style: { ...edgeStyle, label: 'Yes' }, locked: false },
     ];
-    set({ nodes, edges, selectedIds: [], past: [], future: [] });
+    set({ nodes, edges, freeformLines: [], selectedIds: [], past: [], future: [] });
   },
+
+  addFreeformLine: (start, end) => {
+    get().pushHistory();
+    const id = genId();
+    set(s => ({
+      freeformLines: [...s.freeformLines, {
+        id, start, end,
+        style: { stroke: '#6A1B9A', strokeWidth: 2, pattern: 'solid', arrowStart: 'none', arrowEnd: 'triangle', label: '' },
+      }],
+      selectedIds: [id],
+    }));
+  },
+
+  updateFreeformLineStyle: (id, style) => {
+    get().pushHistory();
+    set(s => ({ freeformLines: s.freeformLines.map(l => l.id === id ? { ...l, style: { ...l.style, ...style } } : l) }));
+  },
+
+  setActiveTool: (tool) => set({ activeTool: tool }),
 }));
