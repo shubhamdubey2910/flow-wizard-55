@@ -286,7 +286,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
     try {
       const doc = JSON.parse(json);
       get().pushHistory();
-      set({ nodes: doc.nodes || [], edges: doc.edges || [], selectedIds: [] });
+      set({ nodes: doc.nodes || [], edges: doc.edges || [], freeformLines: doc.freeformLines || [], selectedIds: [] });
     } catch (e) { console.error('Invalid JSON', e); }
   },
 
