@@ -42,11 +42,13 @@ interface Clipboard { nodes: FlowNode[]; edges: FlowEdge[]; freeformLines: Freef
 interface FlowchartStore {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  freeformLines: FreeformLine[];
   selectedIds: string[];
   canvas: CanvasState;
   past: Snapshot[];
   future: Snapshot[];
   clipboard: Clipboard;
+  activeTool: 'select' | 'line';
 
   addNode: (type: ShapeType, x: number, y: number) => string;
   moveNode: (id: string, x: number, y: number) => void;
