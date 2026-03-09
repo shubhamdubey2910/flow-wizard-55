@@ -95,7 +95,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   activeTool: 'select',
 
   pushHistory: () => set(s => ({
-    past: [...s.past.slice(-30), { nodes: JSON.parse(JSON.stringify(s.nodes)), edges: JSON.parse(JSON.stringify(s.edges)) }],
+    past: [...s.past.slice(-30), { nodes: JSON.parse(JSON.stringify(s.nodes)), edges: JSON.parse(JSON.stringify(s.edges)), freeformLines: JSON.parse(JSON.stringify(s.freeformLines)) }],
     future: [],
   })),
 
