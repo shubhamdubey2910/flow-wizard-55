@@ -162,6 +162,16 @@ export const Toolbar: React.FC = () => {
 
       <div className="h-5 w-px bg-border mx-1" />
 
+      {/* Tool selection */}
+      <Button variant="ghost" size="icon" className={`h-8 w-8 ${activeTool === 'select' ? 'bg-accent' : ''}`} onClick={() => setActiveTool('select')} title="Select (V)">
+        <MousePointer2 className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" className={`h-8 w-8 ${activeTool === 'line' ? 'bg-accent' : ''}`} onClick={() => setActiveTool('line')} title="Draw Line">
+        <Slash className="h-4 w-4" />
+      </Button>
+
+      <div className="h-5 w-px bg-border mx-1" />
+
       {/* Swimlane insert */}
       <div className="relative" ref={swimMenuRef}>
         <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setShowSwimMenu(!showSwimMenu)} title="Insert Swimlane (L)">

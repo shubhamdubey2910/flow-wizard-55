@@ -157,6 +157,47 @@ export const Inspector: React.FC = () => {
           </>
         )}
 
+        {showFreeformLine && selectedFreeformLine && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Line Style</Label>
+              <select value={selectedFreeformLine.style.pattern} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { pattern: e.target.value as any })} className="w-full h-8 rounded border border-border bg-background text-sm px-2">
+                <option value="solid">Solid</option>
+                <option value="dotted">Dotted</option>
+                <option value="dashed">Dashed</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Arrow Start</Label>
+                <select value={selectedFreeformLine.style.arrowStart} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { arrowStart: e.target.value as any })} className="w-full h-8 rounded border border-border bg-background text-sm px-2">
+                  <option value="none">None</option>
+                  <option value="triangle">Arrow</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Arrow End</Label>
+                <select value={selectedFreeformLine.style.arrowEnd} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { arrowEnd: e.target.value as any })} className="w-full h-8 rounded border border-border bg-background text-sm px-2">
+                  <option value="none">None</option>
+                  <option value="triangle">Arrow</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Stroke</Label>
+              <ColorSwatchPicker value={selectedFreeformLine.style.stroke} onChange={c => updateFreeformLineStyle(selectedFreeformLine.id, { stroke: c })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Width</Label>
+              <input type="range" min={1} max={6} value={selectedFreeformLine.style.strokeWidth} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { strokeWidth: +e.target.value })} className="w-full accent-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Label</Label>
+              <Input value={selectedFreeformLine.style.label} onChange={e => updateFreeformLineStyle(selectedFreeformLine.id, { label: e.target.value })} className="h-8 text-sm" placeholder="e.g. Yes / No" />
+            </div>
+          </>
+        )}
+
         {showPool && selectedPool && (
           <>
             <div className="space-y-1.5">
