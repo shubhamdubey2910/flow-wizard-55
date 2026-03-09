@@ -45,6 +45,13 @@ export interface FlowEdge {
   locked: boolean;
 }
 
+export interface FreeformLine {
+  id: string;
+  start: Point;
+  end: Point;
+  style: EdgeStyle;
+}
+
 export interface CanvasState {
   zoom: number;
   offset: Point;
