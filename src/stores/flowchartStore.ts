@@ -36,8 +36,8 @@ const defaultLabels: Record<ShapeType, string> = {
   exception: 'Error',
 };
 
-interface Snapshot { nodes: FlowNode[]; edges: FlowEdge[]; }
-interface Clipboard { nodes: FlowNode[]; edges: FlowEdge[]; }
+interface Snapshot { nodes: FlowNode[]; edges: FlowEdge[]; freeformLines: FreeformLine[]; }
+interface Clipboard { nodes: FlowNode[]; edges: FlowEdge[]; freeformLines: FreeformLine[]; }
 
 interface FlowchartStore {
   nodes: FlowNode[];
