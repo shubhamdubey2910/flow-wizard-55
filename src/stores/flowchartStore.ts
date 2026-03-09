@@ -218,11 +218,12 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   }),
 
   copySelected: () => {
-    const { nodes, edges, selectedIds } = get();
+    const { nodes, edges, freeformLines, selectedIds } = get();
     const selNodes = nodes.filter(n => selectedIds.includes(n.id));
     const selNodeIds = new Set(selNodes.map(n => n.id));
     const selEdges = edges.filter(e => selNodeIds.has(e.source.nodeId) && selNodeIds.has(e.target.nodeId));
-    set({ clipboard: { nodes: JSON.parse(JSON.stringify(selNodes)), edges: JSON.parse(JSON.stringify(selEdges)) } });
+    const selLines = freeformLines.filter(l => selectedIds.includes(l.id));
+    set({ clipboard: { nodes: JSON.parse(JSON.stringify(selNodes)), edges: JSON.parse(JSON.stringify(selEdges)), freeformLines: JSON.parse(JSON.stringify(selLines)) } });
   },
 
   cutSelected: () => {
