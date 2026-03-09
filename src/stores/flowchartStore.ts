@@ -82,7 +82,7 @@ export const useFlowchartStore = create<FlowchartStore>((set, get) => ({
   nodes: [],
   edges: [],
   selectedIds: [],
-  canvas: { zoom: 1, offset: { x: 0, y: 0 }, grid: { enabled: true, size: 20 } },
+  canvas: { zoom: 1, offset: { x: 0, y: 0 }, grid: { enabled: true, size: 8 } },
   past: [],
   future: [],
   clipboard: { nodes: [], edges: [] },
